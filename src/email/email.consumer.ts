@@ -1,18 +1,35 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import * as mailgun from 'mailgun-js';
 import { RabbitMQService } from '../rabbitmq/rabbitmq.service';
 import { ForgotPasswordEmailData, WelcomeEmailData } from './interfaces/email.interface';
 
 @Injectable()
 export class EmailConsumer implements OnModuleInit {
-  private mg = mailgun({
-    apiKey: process.env.MAILGUN_API_KEY,
-    domain: process.env.MAILGUN_DOMAIN,
-  });
+  private readonly logger = new Logger(EmailConsumer.name);
+  private readonly mailgunEnabled: boolean;
+  private mg: mailgun.Mailgun | null = null;
 
-  constructor(private readonly rabbitMQService: RabbitMQService) {}
+  constructor(private readonly rabbitMQService: RabbitMQService) {
+    const apiKey = process.env.MAILGUN_API_KEY;
+    const domain = process.env.MAILGUN_DOMAIN;
+
+    this.mailgunEnabled = Boolean(apiKey && domain);
+
+    if (this.mailgunEnabled) {
+      this.mg = mailgun({ apiKey, domain });
+    } else {
+      this.logger.warn(
+        'Mailgun no configurado (MAILGUN_API_KEY / MAILGUN_DOMAIN ausentes). El consumidor de correos queda deshabilitado.'
+      );
+    }
+  }
 
   async onModuleInit() {
+    if (!this.mailgunEnabled) {
+      this.logger.warn('EmailConsumer deshabilitado: no se consumirán colas de correo.');
+      return;
+    }
+
     await this.startConsumingForgotPassword();
     await this.startConsumingWelcome();
   }
@@ -46,8 +63,7 @@ export class EmailConsumer implements OnModuleInit {
         await this.mg.messages().send(mailOptions);
         this.rabbitMQService.channel.ack(msg);
         
-        console.log(`Forgot password email sent to ${emailData.to}`);
-      } catch (error) {
+        console.log(`Forgot password email sent to ${emailData.to}`);      } catch (error) {
         console.error('Error processing forgot password email:', error.message);
         this.rabbitMQService.channel.nack(msg, false, false); // No requeue en caso de error
       }

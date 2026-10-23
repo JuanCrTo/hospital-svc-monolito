@@ -13,7 +13,7 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Public()
-  @Post('signIn')
+  @Post('sign-in')
   @HttpCode(201)
   @ApiOperation({ summary: 'Sign in a user' })
   @ApiStandardResponse(SignInResponseDto, 201)
@@ -27,16 +27,16 @@ export class AuthController {
   }
 
   @Public()
-  @Post('forgotpassword')
+  @Post('password-reset')
   @HttpCode(201)
   @ApiOperation({ summary: 'Request a password reset' })
-  @ApiStandardResponse(SignInRequestDto, 201)
+  @ApiStandardResponse(null, 201)
   @ApiStandardError()
   @ApiBody({
     description: 'User email',
     type: ForgotPasswordRequestDto
   })
-  async forgotPassword(@Body('email') email: string) {
+  async forgotPassword(@Body() { email }: ForgotPasswordRequestDto) {
     return this.authService.handleForgotPassword(email)
   }
 }

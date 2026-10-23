@@ -1,26 +1,38 @@
-import { Body, Controller, Get, HttpCode, Param, Put } from '@nestjs/common'
+import { Body, Controller, Get, HttpCode, Param, Patch, Query } from '@nestjs/common'
 import { PatientService } from './patient.service'
-import { Patient } from './model/patient.schema'
 import { UpdatePatientDto } from './dto/request/update-user-request.dto'
 import { Public } from 'src/decorators/request/public.decorator'
-import { ApiBearerAuth, ApiBody, ApiOkResponse, ApiOperation } from '@nestjs/swagger'
-import { CreatePatientDto } from './dto/request/create-patient-request.dto'
+import { ApiBearerAuth, ApiBody, ApiOperation, ApiQuery } from '@nestjs/swagger'
 import { ApiStandardError } from 'src/decorators/swagger/error.decorator'
 import { ApiStandardResponse } from 'src/decorators/swagger/response.decorator'
 import { PatientResponseDto } from './dto/response/patient-response.dto'
 
-@Controller('patient')
+@Controller('patients')
 export class PatientController {
   constructor(private readonly patientService: PatientService) {}
 
   @Public()
   @Get()
   @HttpCode(200)
-  @ApiOperation({ summary: 'Get all patients' })
+  @ApiOperation({ summary: 'Get all patients or filter by query params' })
+  @ApiQuery({ name: 'identification', required: false, description: 'Filter by identification' })
+  @ApiQuery({ name: 'age', required: false, description: 'Filter by age' })
+  @ApiQuery({ name: 'firstname', required: false, description: 'Filter by firstname' })
+  @ApiQuery({ name: 'lastname', required: false, description: 'Filter by lastname' })
   @ApiStandardResponse(PatientResponseDto, 200)
   @ApiStandardError()
-  async findAll(): Promise<PatientResponseDto[]> {
-    return this.patientService.findAll()
+  async findAll(
+    @Query('identification') identification?: string,
+    @Query('age') age?: string,
+    @Query('firstname') firstname?: string,
+    @Query('lastname') lastname?: string
+  ): Promise<PatientResponseDto[]> {
+    return this.patientService.findAll({
+      identification,
+      age: age !== undefined ? Number(age) : undefined,
+      firstname,
+      lastname
+    })
   }
 
   @ApiBearerAuth('JWT-auth')
@@ -34,54 +46,14 @@ export class PatientController {
   }
 
   @ApiBearerAuth('JWT-auth')
-  @Get('identification/:identification')
-  @HttpCode(200)
-  @ApiOperation({ summary: 'Get patient by identification' })
-  @ApiStandardResponse(PatientResponseDto, 200)
-  @ApiStandardError()
-  async findByIdentification(@Param('identification') identification: string): Promise<PatientResponseDto> {
-    return this.patientService.findByIdentification(identification)
-  }
-
-  @ApiBearerAuth('JWT-auth')
-  @Get('age/:age')
-  @HttpCode(200)
-  @ApiOperation({ summary: 'Get patients by age' })
-  @ApiStandardResponse(PatientResponseDto, 200)
-  @ApiStandardError()
-  async findByAge(@Param('age') age: number): Promise<PatientResponseDto[]> {
-    return this.patientService.findByAge(age)
-  }
-
-  @ApiBearerAuth('JWT-auth')
-  @Get('firstname/:firstname')
-  @HttpCode(200)
-  @ApiOperation({ summary: 'Get patients by firstname' })
-  @ApiStandardResponse(PatientResponseDto, 200)
-  @ApiStandardError()
-  async findByFirstname(@Param('firstname') firstname: string): Promise<PatientResponseDto[]> {
-    return this.patientService.findByFirstname(firstname)
-  }
-
-  @ApiBearerAuth('JWT-auth')
-  @Get('lastname/:lastname')
-  @HttpCode(200)
-  @ApiOperation({ summary: 'Get patients by lastname' })
-  @ApiStandardResponse(PatientResponseDto, 200)
-  @ApiStandardError()
-  async findByLastname(@Param('lastname') lastname: string): Promise<PatientResponseDto[]> {
-    return this.patientService.findByLastname(lastname)
-  }
-
-  @ApiBearerAuth('JWT-auth')
-  @Put(':id')
+  @Patch(':id')
   @HttpCode(200)
   @ApiOperation({ summary: 'Update a patient by ID' })
   @ApiStandardResponse(PatientResponseDto, 200)
   @ApiStandardError()
   @ApiBody({
     description: 'Patient data',
-    type: CreatePatientDto
+    type: UpdatePatientDto
   })
   async update(@Param('id') id: string, @Body() updatePatientDto: UpdatePatientDto): Promise<PatientResponseDto> {
     return this.patientService.update(id, updatePatientDto)

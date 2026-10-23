@@ -1,7 +1,7 @@
 import { NestFactory } from '@nestjs/core'
 import { AppModule } from './app.module'
 import { ConfigService } from '@nestjs/config'
-import { ValidationPipe } from '@nestjs/common'
+import { ValidationPipe, VersioningType } from '@nestjs/common'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
 import { ResponseInterceptor } from './common/interceptors/response.interceptor'
 import { AllExceptionsFilter } from './common/exception/exception.filter'
@@ -9,6 +9,9 @@ import { AllExceptionsFilter } from './common/exception/exception.filter'
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { cors: true })
   const configService = app.get(ConfigService)
+
+  app.setGlobalPrefix('api')
+  app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' })
 
   app.enableCors({
     origin: [configService.get<string>('LOCAL_URL_2'), configService.get<string>('LOCAL_URL')],

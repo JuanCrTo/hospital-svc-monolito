@@ -73,8 +73,14 @@ export class PatientService {
   }
 
   // findAll
-  async findAll(): Promise<PatientResponseDto[]> {
-    const patients = await this.patientModel.find().select('-_id').lean()
+  async findAll(filters: { identification?: string; age?: number; firstname?: string; lastname?: string } = {}): Promise<PatientResponseDto[]> {
+    const query: Record<string, unknown> = {}
+    if (filters.identification) query.identification = filters.identification
+    if (filters.age !== undefined && !Number.isNaN(filters.age)) query.age = filters.age
+    if (filters.firstname) query.firstname = filters.firstname
+    if (filters.lastname) query.lastname = filters.lastname
+
+    const patients = await this.patientModel.find(query).select('-_id').lean()
     return patients.map(mapPatientToDto)
   }
 

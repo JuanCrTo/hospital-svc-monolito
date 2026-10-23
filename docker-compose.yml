@@ -1,0 +1,62 @@
+services:
+  api:
+    build:
+      context: .
+      target: development
+    container_name: hospital-b-api
+    restart: unless-stopped
+    command: npm run start:dev
+    ports:
+      - '4000:4000'
+    env_file:
+      - .env
+    environment:
+      MONGO_URI: mongodb://mongo:27017/hospital
+      RABBITMQ_URL: amqp://rabbitmq:5672
+      PORT: 4000
+    volumes:
+      - .:/usr/src/app
+      - /usr/src/app/node_modules
+    depends_on:
+      mongo:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+    networks:
+      - hospital
+
+  mongo:
+    image: mongo:7
+    container_name: hospital-b-mongo
+    restart: unless-stopped
+    ports:
+      - '27017:27017'
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ['CMD', 'mongosh', '--eval', "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - hospital
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: hospital-b-rabbitmq
+    restart: unless-stopped
+    ports:
+      - '5672:5672'
+      - '15672:15672'
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - hospital
+
+volumes:
+  mongo_data:
+  rabbitmq_data:
+
+networks:
+  hospital:
+    driver: bridge

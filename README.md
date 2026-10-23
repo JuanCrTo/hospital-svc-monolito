@@ -116,6 +116,9 @@ hospital-api/
 │
 ├── .env.example
 ├── .gitignore
+├── .dockerignore
+├── Dockerfile
+├── docker-compose.yml
 ├── package.json
 ├── tsconfig.json
 └── README.md
@@ -245,6 +248,145 @@ Si todo está bien:
 * Swagger debería cargar en /api
 * Los endpoints deberían responder correctamente
 * Si usas colas (RabbitMQ), asegúrate que esté activa la conexión
+
+---
+
+## 🐳 Cómo Ejecutar con Docker
+
+El proyecto incluye un `Dockerfile` multi-etapa (`development` y `production`) y un `docker-compose.yml` que levanta la API junto con **MongoDB** y **RabbitMQ** para desarrollo local.
+
+### Archivos Docker incluidos
+
+| Archivo | Propósito |
+|---------|-----------|
+| `Dockerfile` | Imagen multi-stage: `development` (hot-reload con `start:dev`) y `production` (build compilado). |
+| `docker-compose.yml` | Orquesta `api`, `mongo` y `rabbitmq` en la red `hospital`. |
+| `.dockerignore` | Excluye `node_modules`, `dist`, `.env`, etc. del contexto de build. |
+
+### 1. 🧩 Requisitos
+
+- [Docker](https://docs.docker.com/get-docker/) (Docker Desktop, o Docker Engine + Compose v2).
+
+### 2. 🛠️ Preparar variables de entorno
+
+El `.env` es obligatorio. `docker-compose.yml` lo carga con `env_file`, pero **sobrescribe** `MONGO_URI`, `RABBITMQ_URL` y `PORT` para apuntar a los contenedores:
+
+- `MONGO_URI` → `mongodb://mongo:27017/hospital`
+- `RABBITMQ_URL` → `amqp://rabbitmq:5672`
+- `PORT` → `4000`
+
+```bash
+cp .env.example .env
+# Edita .env con tus valores reales (JWT, Mailgun, Google Maps, Cloudinary, etc.)
+```
+
+> 💡 Las claves de servicios externos (Mailgun, Google Maps, Cloudinary) siguen viniendo de tu `.env`. Si no las usas en pruebas locales puedes dejarlas vacías, pero algunos flujos (envío de correo, geocodificación) fallarán.
+
+### 3. 🚦 Levantar el stack en desarrollo
+
+El flujo son **dos pasos**: primero descargas/construyes las imágenes Docker, y luego levantas el proyecto. La API se ejecuta con `npm run start:dev` dentro del contenedor.
+
+#### Paso 1 — Descargar/construir las imágenes
+
+```bash
+# Descarga las imágenes base (node:20-bookworm-slim, mongo:7, rabbitmq:3-management)
+# y construye la imagen de la API (target: development)
+docker compose build
+
+# (o forzando reconstrucción sin caché)
+docker compose build --no-cache
+```
+
+Si prefieres descargar sólo las imágenes de infraestructura (Mongo y RabbitMQ) sin construir la API todavía:
+
+```bash
+docker pull mongo:7
+docker pull rabbitmq:3-management
+```
+
+#### Paso 2 — Levantar el proyecto
+
+```bash
+# Levantar todo el stack (api + mongo + rabbitmq).
+# El contenedor de la API ejecuta `npm run start:dev`.
+docker compose up
+```
+
+Para ejecutarlo en segundo plano:
+
+```bash
+docker compose up -d
+```
+
+`docker compose up --build` combina ambos pasos (construye y levanta) en un solo comando.
+
+Esto deja disponibles:
+
+| Servicio | URL / Puerto | Descripción |
+|----------|--------------|-------------|
+| API | http://localhost:4000 | Backend NestJS con hot-reload |
+| Swagger | http://localhost:4000/api | Documentación interactiva |
+| MongoDB | `localhost:27017` | Base de datos local |
+| RabbitMQ | `localhost:5672` | Broker de colas |
+| RabbitMQ UI | http://localhost:15672 | Panel web (`guest` / `guest`) |
+
+El código fuente está montado como volumen (`.:/usr/src/app`), por lo que los cambios en `src/` recargan el servidor automáticamente.
+
+### 4. 💻 Ejecutar los `npm run` dentro del contenedor
+
+El comando de arranque ya es `npm run start:dev`, pero puedes ejecutar cualquier script de `package.json` dentro del contenedor con `docker compose exec`:
+
+```bash
+# Desarrollo con hot-reload (ya es el comando por defecto del contenedor)
+docker compose exec api npm run start:dev
+
+# Build de producción
+docker compose exec api npm run build
+
+# Ejecutar la app compilada
+docker compose exec api npm run start:prod
+
+# Tests
+docker compose exec api npm test -- --runInBand
+
+# Linter
+docker compose exec api npm run lint
+```
+
+> 💡 Alternativa sin Docker: si ya tienes Node.js 20+ y MongoDB/RabbitMQ accesibles localmente, ejecuta directamente `npm install` y `npm run start:dev` (ver [🚀 Cómo Ejecutar Localmente](#-cómo-ejecutar-localmente)).
+
+### 5. 🧪 Comandos útiles
+
+```bash
+# Ver logs de la API
+docker compose logs -f api
+
+# Abrir una shell dentro del contenedor de la API
+docker compose exec api sh
+
+# Ejecutar los tests dentro del contenedor
+docker compose exec api npm test -- --runInBand
+
+# Detener el stack (conserva los volúmenes de datos)
+docker compose down
+
+# Detener y borrar también los datos de Mongo y RabbitMQ
+docker compose down -v
+```
+
+### 6. 🏗️ Imagen de producción
+
+Para construir y ejecutar la imagen de producción (sin el stack de desarrollo):
+
+```bash
+# Construir la imagen de producción
+docker build --target production -t hospital-b:prod .
+
+# Ejecutar apuntando a tus servicios externos
+docker run --rm -p 4000:4000 --env-file .env hospital-b:prod
+```
+
+> ⚠️ En producción debes proporcionar un `MONGO_URI` y `RABBITMQ_URL` accesibles desde el contenedor (por ejemplo, MongoDB y CloudAMQP gestionados), ya que no hay los contenedores locales de `docker-compose`.
 
 ---
 
