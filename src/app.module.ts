@@ -25,7 +25,8 @@ import { RlsModule } from './common/rls/rls.module'
 @Module({
   imports: [
     ConfigModule.forRoot({
-      isGlobal: true
+      isGlobal: true,
+      envFilePath: ['.env.local', '.env']
     }),
     TypeOrmModule.forRootAsync({ useClass: TypeOrmConfigService }),
     RlsModule,
