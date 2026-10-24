@@ -2,13 +2,10 @@ import { CallHandler, ExecutionContext, Injectable, NestInterceptor } from '@nes
 import { Observable } from 'rxjs'
 import { map } from 'rxjs/operators'
 // import { v4 as uuidv4 } from 'uuid'
-import { Request } from 'express'
-
 @Injectable()
 export class ResponseInterceptor<T> implements NestInterceptor<T, any> {
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
     const ctx = context.switchToHttp()
-    const request = ctx.getRequest<Request>()
     // const traceId = uuidv4()
 
     return next.handle().pipe(
@@ -18,7 +15,7 @@ export class ResponseInterceptor<T> implements NestInterceptor<T, any> {
           message: 'Operación realizada con éxito',
           success: true,
           statusCode: ctx.getResponse().statusCode ?? 200,
-          data,
+          data
           // details: null,
           // traceId
         }

@@ -22,7 +22,8 @@ API RESTful para la gestión hospitalaria. Permite administrar pacientes, doctor
 
 - **Backend Framework:** [NestJS](https://nestjs.com/)
 - **Lenguaje:** TypeScript
-- **Base de Datos:** MongoDB (Mongoose ODM)
+- **Base de Datos:** PostgreSQL 16 (TypeORM) — destino de la migración
+- **Base de Datos legado:** MongoDB (Mongoose ODM) durante la migración
 - **Autenticación:** JWT
 - **Colas de Trabajo:** RabbitMQ
 - **Correo:** Mailgun
@@ -105,6 +106,12 @@ hospital-api/
 │   │   ├── user.controller.ts
 │   │   ├── user.module.ts
 │   │   └── user.service.ts
+│   │
+│   ├── tenant/                 # Entidad Tenant (TypeORM)
+│   ├── facility/               # Entidad Facility (TypeORM)
+│   ├── health/                 # /health/live y /health/ready
+│   ├── migrations/             # Migraciones versionadas de TypeORM
+│   ├── typeorm-config/         # DataSource CLI y configuración de Nest
 │   │
 │   ├── utils/                   # Funciones auxiliares
 │   │   ├── utils.ts
@@ -226,41 +233,56 @@ npm install
 ### 4. 🧪 Verificar dependencias externas
 Asegúrate de tener ejecutando o configurado correctamente:
 
+* 🐘 PostgreSQL 16 (local o con `docker compose up postgres`)
 * 🐇 RabbitMQ (puede estar en CloudAMQP o local)
-* 🍃 MongoDB (local o desplegado)
+* 🍃 MongoDB (local o desplegado) — legado durante la migración
 * Mailgun y Cloudinary si vas a probar envíos de correo y subida de archivos
 
-### 5. 🚦 Levantar el servidor en modo desarrollo
+### 5. 🗄️ Aplicar migraciones de PostgreSQL
+```bash
+# Ejecuta las migraciones versionadas de src/migrations/
+npm run migration:run
+
+# Comandos disponibles
+npm run migration:generate -- src/migrations/NombreDeLaMigracion
+npm run migration:revert
+npm run migration:show
+```
+
+> ⚠️ Las migraciones modifican la base de datos. Revísalas antes de ejecutarlas.
+
+### 6. 🚦 Levantar el servidor en modo desarrollo
 ```bash
 npm run start:dev
 ```
 
-### 6. 📲 Probar la API
+### 7. 📲 Probar la API
 * Abre Postman o tu cliente HTTP favorito
 * Usa la URL base: `http://localhost:4000`
 * Accede a la documentación Swagger:
 http://localhost:4000/api
 
-
-### 7. ✅ Comprobación
+### 8. ✅ Comprobación
 Si todo está bien:
 
 * Swagger debería cargar en /api
 * Los endpoints deberían responder correctamente
+* `GET /api/v1/health/live` responde `{"status":"ok"}`
+* `GET /api/v1/health/ready` responde `{"status":"ok","database":"up"}` si PostgreSQL está disponible
 * Si usas colas (RabbitMQ), asegúrate que esté activa la conexión
 
 ---
 
 ## 🐳 Cómo Ejecutar con Docker
 
-El proyecto incluye un `Dockerfile` multi-etapa (`development` y `production`) y un `docker-compose.yml` que levanta la API junto con **MongoDB** y **RabbitMQ** para desarrollo local.
+El proyecto incluye un `Dockerfile` multi-etapa (`development` y `production`) y un `docker-compose.yml` que levanta la API junto con **PostgreSQL**, **MongoDB** (legado) y **RabbitMQ** para desarrollo local.
 
 ### Archivos Docker incluidos
 
 | Archivo | Propósito |
 |---------|-----------|
 | `Dockerfile` | Imagen multi-stage: `development` (hot-reload con `start:dev`) y `production` (build compilado). |
-| `docker-compose.yml` | Orquesta `api`, `mongo` y `rabbitmq` en la red `hospital`. |
+| `docker-compose.yml` | Orquesta `api`, `postgres`, `mongo` y `rabbitmq` en la red `hospital`. |
 | `.dockerignore` | Excluye `node_modules`, `dist`, `.env`, etc. del contexto de build. |
 
 ### 1. 🧩 Requisitos
@@ -269,11 +291,14 @@ El proyecto incluye un `Dockerfile` multi-etapa (`development` y `production`) y
 
 ### 2. 🛠️ Preparar variables de entorno
 
-El `.env` es obligatorio. `docker-compose.yml` lo carga con `env_file`, pero **sobrescribe** `MONGO_URI`, `RABBITMQ_URL` y `PORT` para apuntar a los contenedores:
+El `.env` es obligatorio. `docker-compose.yml` lo carga con `env_file`, pero **sobrescribe** las conexiones para apuntar a los contenedores:
 
+- `DB_HOST` → `postgres` · `DB_PORT` → `5432`
 - `MONGO_URI` → `mongodb://mongo:27017/hospital`
 - `RABBITMQ_URL` → `amqp://rabbitmq:5672`
 - `PORT` → `4000`
+
+Las credenciales locales de PostgreSQL se toman de `DB_USER`, `DB_PASSWORD` y `DB_NAME` (por defecto `hospital`).
 
 ```bash
 cp .env.example .env
@@ -289,7 +314,7 @@ El flujo son **dos pasos**: primero descargas/construyes las imágenes Docker, y
 #### Paso 1 — Descargar/construir las imágenes
 
 ```bash
-# Descarga las imágenes base (node:20-bookworm-slim, mongo:7, rabbitmq:3-management)
+# Descarga las imágenes base (node:20-bookworm-slim, postgres:16-alpine, mongo:7, rabbitmq:3-management)
 # y construye la imagen de la API (target: development)
 docker compose build
 
@@ -297,9 +322,10 @@ docker compose build
 docker compose build --no-cache
 ```
 
-Si prefieres descargar sólo las imágenes de infraestructura (Mongo y RabbitMQ) sin construir la API todavía:
+Si prefieres descargar sólo las imágenes de infraestructura (PostgreSQL, Mongo y RabbitMQ) sin construir la API todavía:
 
 ```bash
+docker pull postgres:16-alpine
 docker pull mongo:7
 docker pull rabbitmq:3-management
 ```
@@ -307,7 +333,7 @@ docker pull rabbitmq:3-management
 #### Paso 2 — Levantar el proyecto
 
 ```bash
-# Levantar todo el stack (api + mongo + rabbitmq).
+# Levantar todo el stack (api + postgres + mongo + rabbitmq).
 # El contenedor de la API ejecuta `npm run start:dev`.
 docker compose up
 ```
@@ -326,7 +352,10 @@ Esto deja disponibles:
 |----------|--------------|-------------|
 | API | http://localhost:4000 | Backend NestJS con hot-reload |
 | Swagger | http://localhost:4000/api | Documentación interactiva |
-| MongoDB | `localhost:27017` | Base de datos local |
+| Health live | http://localhost:4000/api/v1/health/live | Liveness probe |
+| Health ready | http://localhost:4000/api/v1/health/ready | Readiness probe (PostgreSQL) |
+| PostgreSQL | `localhost:5432` | Base de datos principal |
+| MongoDB | `localhost:27017` | Base de datos legado |
 | RabbitMQ | `localhost:5672` | Broker de colas |
 | RabbitMQ UI | http://localhost:15672 | Panel web (`guest` / `guest`) |
 

@@ -12,15 +12,22 @@ import { AuthModule } from './auth/auth.module'
 import { MongooseModule } from '@nestjs/mongoose'
 import { ConfigModule } from '@nestjs/config'
 import { MongooseConfigService } from './mongoose-config/mongoose-config.service'
+import { TypeOrmModule } from '@nestjs/typeorm'
+import { TypeOrmConfigService } from './typeorm-config/typeorm-config.service'
 import { EmailModule } from './email/email.module'
 import { PdfModule } from './pdf/pdf.module'
 import { RabbitMQModule } from './rabbitmq/rabbitmq.module'
+import { LoggerModule } from './common/logging/logger.module'
+import { HealthModule } from './health/health.module'
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true
     }),
+    TypeOrmModule.forRootAsync({ useClass: TypeOrmConfigService }),
+    LoggerModule,
+    HealthModule,
     MongooseModule.forRootAsync({ useClass: MongooseConfigService }),
     DoctorModule,
     UserModule,
