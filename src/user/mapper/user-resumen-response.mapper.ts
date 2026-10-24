@@ -1,8 +1,8 @@
 import { UserResumenResponseDto } from '../dto/response/user-resumen-response.dto'
 import { UserRole } from '../enums/user-role.enum'
-import { User } from '../model/user.schema'
+import { UserEntity } from '../model/user.entity'
 
-export function mapUserResumenToDto(user: Partial<User>): UserResumenResponseDto {
+export function mapUserResumenToDto(user: Partial<UserEntity>): UserResumenResponseDto {
   if (!user) return undefined
 
   return {

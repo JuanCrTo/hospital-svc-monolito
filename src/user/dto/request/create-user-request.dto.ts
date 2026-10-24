@@ -1,6 +1,6 @@
-import { IsEmail, IsEnum, IsNotEmpty, IsOptional, IsString, IsStrongPassword, ValidateNested } from 'class-validator'
+import { IsEmail, IsEnum, IsNotEmpty, IsString, IsStrongPassword, ValidateIf, ValidateNested } from 'class-validator'
 import { USER_ROLES, UserRole } from '../../enums/user-role.enum'
-import { CreatePatientDto } from 'src/patient/dto/request/create-patient-request.dto'
+import { CreatePatientRequestDto } from 'src/patient/dto/request/create-patient-request.dto'
 import { Type } from 'class-transformer'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 
@@ -9,7 +9,6 @@ export class CreateUserDto {
     description: 'The name of the user',
     example: 'user@example.com'
   })
-  @IsString({ message: 'Email must be a string' })
   @IsNotEmpty({ message: 'Email is required' })
   @IsEmail({ allow_display_name: false, require_tld: true }, { message: 'Email must be a valid email address' })
   email: string
@@ -49,12 +48,13 @@ export class CreateUserDto {
 
   @ApiPropertyOptional({
     description: 'details of the patient',
-    type: () => CreatePatientDto
+    type: () => CreatePatientRequestDto
   })
+  @ValidateIf(o => o.role === 'patient')
   @IsNotEmpty({ message: 'Patient Details is required' })
   @ValidateNested()
-  @Type(() => CreatePatientDto)
-  patientDetails?: CreatePatientDto
+  @Type(() => CreatePatientRequestDto)
+  patientDetails?: CreatePatientRequestDto
 
   // @IsOptional()
   // @ValidateNested()

@@ -7,7 +7,6 @@ export class SignInRequestDto {
     example: 'user@example.com'
   })
   @IsNotEmpty({ message: 'Email is required' })
-  @IsString({ message: 'Email must be a string' })
   @IsEmail({ allow_display_name: false, require_tld: true }, { message: 'Invalid email address' })
   email: string
 
