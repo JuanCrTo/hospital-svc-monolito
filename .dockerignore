@@ -12,3 +12,9 @@ Dockerfile
 docker-compose*.yml
 .vscode
 .idea
+.opencode
+.github
+docs
+test
+AGENTS.md
+**/*.spec.ts
