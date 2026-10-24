@@ -1,7 +1,8 @@
-import { Body, Controller, Get, HttpCode, Param, Patch, Query } from '@nestjs/common'
+import { Body, Controller, Get, HttpCode, Param, Patch, Post, Query } from '@nestjs/common'
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiQuery } from '@nestjs/swagger'
 import { PatientService } from './patient.service'
 import { UpdatePatientRequestDto } from './dto/request/update-patient-request.dto'
+import { RegisterPatientRequestDto } from './dto/request/register-patient-request.dto'
 import { CurrentUser } from 'src/decorators/request/current-user.decorator'
 import { RequirePermission } from 'src/decorators/request/require-permission.decorator'
 import { ApiStandardError } from 'src/decorators/swagger/error.decorator'
@@ -12,6 +13,18 @@ import { PatientResponseDto } from './dto/response/patient-response.dto'
 @Controller('patients')
 export class PatientController {
   constructor(private readonly patientService: PatientService) {}
+
+  @ApiBearerAuth('JWT-auth')
+  @Post()
+  @RequirePermission('patient:write')
+  @HttpCode(201)
+  @ApiOperation({ summary: 'Register a patient for an existing active tenant member' })
+  @ApiBody({ type: RegisterPatientRequestDto })
+  @ApiStandardResponse(PatientResponseDto, 201)
+  @ApiStandardError()
+  async register(@CurrentUser() ctx: AuthContext, @Body() dto: RegisterPatientRequestDto): Promise<PatientResponseDto> {
+    return this.patientService.register(dto, ctx.tenantId)
+  }
 
   @ApiBearerAuth('JWT-auth')
   @Get()
