@@ -63,9 +63,9 @@ export class EmailService {
     }
   }
 
-  async sendEmailWelcome(userId: string): Promise<any> {
+  async sendEmailWelcome(userId: string, tenantId?: string): Promise<any> {
     try {
-      const user = await this.userService.findById(userId)
+      const user = await this.userService.findById(userId, tenantId)
 
       if (!user || !user.email) {
         throw new Error('User not found or email missing')
@@ -76,7 +76,7 @@ export class EmailService {
 
       switch (tipo) {
         case 'patient':
-          const patient = await this.patientService.findByUserId(userId)
+          const patient = await this.patientService.findByUserId(userId, tenantId)
           name = patient?.firstname || 'Paciente'
           break
         // case 'doctor':

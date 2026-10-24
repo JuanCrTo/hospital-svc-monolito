@@ -1,10 +1,12 @@
 import { Body, Controller, Get, HttpCode, Param, Patch, Query } from '@nestjs/common'
-import { PatientService } from './patient.service'
-import { UpdatePatientDto } from './dto/request/update-user-request.dto'
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiQuery } from '@nestjs/swagger'
+import { PatientService } from './patient.service'
+import { UpdatePatientRequestDto } from './dto/request/update-patient-request.dto'
+import { CurrentUser } from 'src/decorators/request/current-user.decorator'
 import { RequirePermission } from 'src/decorators/request/require-permission.decorator'
 import { ApiStandardError } from 'src/decorators/swagger/error.decorator'
 import { ApiStandardResponse } from 'src/decorators/swagger/response.decorator'
+import { AuthContext } from 'src/iam/interfaces/auth-context.interface'
 import { PatientResponseDto } from './dto/response/patient-response.dto'
 
 @Controller('patients')
@@ -23,12 +25,13 @@ export class PatientController {
   @ApiStandardResponse(PatientResponseDto, 200)
   @ApiStandardError()
   async findAll(
+    @CurrentUser() ctx: AuthContext,
     @Query('identification') identification?: string,
     @Query('age') age?: string,
     @Query('firstname') firstname?: string,
     @Query('lastname') lastname?: string
   ): Promise<PatientResponseDto[]> {
-    return this.patientService.findAll({
+    return this.patientService.findAll(ctx.tenantId, {
       identification,
       age: age !== undefined ? Number(age) : undefined,
       firstname,
@@ -43,8 +46,8 @@ export class PatientController {
   @ApiOperation({ summary: 'Get patient by ID' })
   @ApiStandardResponse(PatientResponseDto, 200)
   @ApiStandardError()
-  async findById(@Param('id') id: string): Promise<PatientResponseDto> {
-    return this.patientService.findById(id)
+  async findById(@CurrentUser() ctx: AuthContext, @Param('id') id: string): Promise<PatientResponseDto> {
+    return this.patientService.findById(id, ctx.tenantId)
   }
 
   @ApiBearerAuth('JWT-auth')
@@ -56,9 +59,9 @@ export class PatientController {
   @ApiStandardError()
   @ApiBody({
     description: 'Patient data',
-    type: UpdatePatientDto
+    type: UpdatePatientRequestDto
   })
-  async update(@Param('id') id: string, @Body() updatePatientDto: UpdatePatientDto): Promise<PatientResponseDto> {
-    return this.patientService.update(id, updatePatientDto)
+  async update(@CurrentUser() ctx: AuthContext, @Param('id') id: string, @Body() dto: UpdatePatientRequestDto): Promise<PatientResponseDto> {
+    return this.patientService.update(id, ctx.tenantId, dto)
   }
 }

@@ -1,123 +1,153 @@
-import { Injectable } from '@nestjs/common'
-import { InjectModel } from '@nestjs/mongoose'
-import { Patient } from './model/patient.schema'
-import { Model } from 'mongoose'
-import { CreatePatientDto } from './dto/request/create-patient-request.dto'
-import { UpdatePatientDto } from './dto/request/update-user-request.dto'
-import { addLocationToHistory, calculateAge, calculateClinicalAge, getCoordinatesFromLocation } from 'src/utils/utils'
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common'
+import { InjectRepository } from '@nestjs/typeorm'
+import { Repository } from 'typeorm'
+import { addLocationToHistory, getCoordinatesFromLocation } from 'src/utils/utils'
+import { CreatePatientRequestDto } from './dto/request/create-patient-request.dto'
+import { UpdatePatientRequestDto } from './dto/request/update-patient-request.dto'
 import { PatientResponseDto } from './dto/response/patient-response.dto'
 import { mapPatientToDto } from './mapper/patient-response.mapper'
+import { PatientEntity } from './model/patient.entity'
+import { PatientLocationHistory } from './model/patient-location-history.entity'
+
+export interface PatientFilters {
+  identification?: string
+  age?: number
+  firstname?: string
+  lastname?: string
+}
 
 @Injectable()
 export class PatientService {
-  constructor(@InjectModel(Patient.name) private readonly patientModel: Model<Patient>) {}
+  constructor(
+    @InjectRepository(PatientEntity)
+    private readonly patientRepository: Repository<PatientEntity>,
+    @InjectRepository(PatientLocationHistory)
+    private readonly locationHistoryRepository: Repository<PatientLocationHistory>
+  ) {}
 
-  // create
-  async create(createPatientDto: CreatePatientDto): Promise<void> {
-    const { location } = createPatientDto
-    let latitude: number
-    let longitude: number
+  async create(dto: CreatePatientRequestDto, tenantId: string, userId: string): Promise<PatientResponseDto> {
+    const { latitude, longitude } = await getCoordinatesFromLocation(dto.location)
 
-    if (location) {
-      const coords = await getCoordinatesFromLocation(location)
-      latitude = coords.latitude
-      longitude = coords.longitude
-    }
-
-    const age = calculateAge(createPatientDto.birth)
-    const clinicalage = calculateClinicalAge(createPatientDto.birth)
-
-    const patientWithCalculatedData = {
-      ...createPatientDto,
-      age,
-      clinicalage,
+    const patient = this.patientRepository.create({
+      tenantId,
+      userId,
+      identification: dto.identification,
+      firstname: dto.firstname,
+      middlename: dto.middlename,
+      lastname: dto.lastname,
+      secondlastname: dto.secondlastname,
+      birthDate: dto.birth,
+      location: dto.location,
       latitude,
       longitude
-    }
+    })
 
-    await this.patientModel.create(patientWithCalculatedData)
+    try {
+      const saved = await this.patientRepository.save(patient)
+      return mapPatientToDto(saved)
+    } catch (error) {
+      if (this.isUniqueViolation(error)) throw new ConflictException('Patient identification already exists in this tenant')
+      throw error
+    }
   }
 
-  // update
-  async update(id: string, patient: UpdatePatientDto): Promise<PatientResponseDto> {
-    const updateData: any = { ...patient }
+  async update(id: string, tenantId: string, dto: UpdatePatientRequestDto): Promise<PatientResponseDto> {
+    const patient = await this.patientRepository.findOne({ where: { id, tenantId } })
+    if (!patient) throw new NotFoundException('Patient not found')
 
-    if (updateData.birth) {
-      updateData.age = calculateAge(updateData.birth)
-      updateData.clinicalage = calculateClinicalAge(updateData.birth)
-    }
+    if (dto.identification !== undefined) patient.identification = dto.identification
+    if (dto.firstname !== undefined) patient.firstname = dto.firstname
+    if (dto.middlename !== undefined) patient.middlename = dto.middlename
+    if (dto.lastname !== undefined) patient.lastname = dto.lastname
+    if (dto.secondlastname !== undefined) patient.secondlastname = dto.secondlastname
+    if (dto.birth !== undefined) patient.birthDate = dto.birth
 
-    const { location } = updateData
-    if (location) {
-      const { latitude, longitude } = await getCoordinatesFromLocation(location)
-      updateData.latitude = latitude
-      updateData.longitude = longitude
+    if (dto.location !== undefined) {
+      const { latitude, longitude } = await getCoordinatesFromLocation(dto.location)
+      patient.location = dto.location
+      patient.latitude = latitude
+      patient.longitude = longitude
 
-      const existingPatient = await this.patientModel.findById(id)
-      updateData.locationHistory = addLocationToHistory(existingPatient?.locationHistory || [], { location, latitude, longitude })
-    }
-
-    return this.patientModel
-      .findByIdAndUpdate(id, updateData, {
-        new: true,
-        runValidators: true,
-        lean: true
+      const currentHistory = await this.locationHistoryRepository.find({
+        where: { patientId: patient.id },
+        order: { updatedAt: 'ASC' }
       })
-      .select('-_id')
-      .lean()
+
+      const history = addLocationToHistory(
+        currentHistory.map(entry => ({
+          location: entry.location,
+          latitude: entry.latitude,
+          longitude: entry.longitude,
+          updatedAt: entry.updatedAt
+        })),
+        { location: dto.location, latitude, longitude }
+      )
+
+      if (history.length > currentHistory.length) {
+        await this.locationHistoryRepository.save(
+          this.locationHistoryRepository.create({
+            tenantId,
+            patientId: patient.id,
+            location: dto.location,
+            latitude,
+            longitude
+          })
+        )
+      }
+    }
+
+    try {
+      const saved = await this.patientRepository.save(patient)
+      return this.findById(saved.id, tenantId)
+    } catch (error) {
+      if (this.isUniqueViolation(error)) throw new ConflictException('Patient identification already exists in this tenant')
+      throw error
+    }
   }
 
-  // delete
-  async delete(userId: string): Promise<void> {
-    await this.patientModel.deleteOne({ userId })
-  }
+  async findAll(tenantId: string, filters: PatientFilters = {}): Promise<PatientResponseDto[]> {
+    const query = this.patientRepository
+      .createQueryBuilder('patient')
+      .leftJoinAndSelect('patient.locationHistory', 'history')
+      .where('patient.tenant_id = :tenantId', { tenantId })
 
-  // findAll
-  async findAll(filters: { identification?: string; age?: number; firstname?: string; lastname?: string } = {}): Promise<PatientResponseDto[]> {
-    const query: Record<string, unknown> = {}
-    if (filters.identification) query.identification = filters.identification
-    if (filters.age !== undefined && !Number.isNaN(filters.age)) query.age = filters.age
-    if (filters.firstname) query.firstname = filters.firstname
-    if (filters.lastname) query.lastname = filters.lastname
+    if (filters.identification) query.andWhere('patient.identification = :identification', { identification: filters.identification })
+    if (filters.firstname) query.andWhere('patient.firstname = :firstname', { firstname: filters.firstname })
+    if (filters.lastname) query.andWhere('patient.lastname = :lastname', { lastname: filters.lastname })
+    if (filters.age !== undefined && !Number.isNaN(filters.age)) {
+      query.andWhere("date_part('year', age(patient.birth_date)) = :age", { age: filters.age })
+    }
 
-    const patients = await this.patientModel.find(query).select('-_id').lean()
+    const patients = await query.orderBy('patient.created_at', 'DESC').addOrderBy('history.updated_at', 'ASC').getMany()
     return patients.map(mapPatientToDto)
   }
 
-  // findById
-  async findById(id: string): Promise<PatientResponseDto> {
-    const patient = await this.patientModel.findById(id).select('-_id').lean()
+  async findById(id: string, tenantId: string): Promise<PatientResponseDto> {
+    const patient = await this.patientRepository.findOne({
+      where: { id, tenantId },
+      relations: { locationHistory: true }
+    })
+    if (!patient) throw new NotFoundException('Patient not found')
     return mapPatientToDto(patient)
   }
 
-  // findByUserId
-  async findByUserId(userId: string): Promise<Patient> {
-    return this.patientModel.findOne({ userId }).select('-_id').lean()
+  async findByUserId(userId: string, tenantId?: string): Promise<PatientEntity | null> {
+    return this.patientRepository.findOne({
+      where: tenantId ? { userId, tenantId } : { userId }
+    })
   }
 
-  // findByIdentification
-  async findByIdentification(identification: string): Promise<PatientResponseDto> {
-    const patient = await this.patientModel.findOne({ identification }).select('-_id').lean()
+  async findByIdentification(identification: string, tenantId: string): Promise<PatientResponseDto> {
+    const patient = await this.patientRepository.findOne({ where: { identification, tenantId } })
+    if (!patient) throw new NotFoundException('Patient not found')
     return mapPatientToDto(patient)
   }
 
-  // findByAge
-  async findByAge(age: number): Promise<PatientResponseDto[]> {
-    const patients = await this.patientModel.find({ age }).select('-_id').lean()
-    return patients.map(mapPatientToDto)
+  async deleteByUserAndTenant(userId: string, tenantId: string): Promise<void> {
+    await this.patientRepository.delete({ userId, tenantId })
   }
 
-  // findByFirstname
-  async findByFirstname(firstname: string): Promise<PatientResponseDto[]> {
-    const patients = await this.patientModel.find({ firstname }).select('-_id').lean()
-    return patients.map(mapPatientToDto)
+  private isUniqueViolation(error: unknown): boolean {
+    return typeof error === 'object' && error !== null && 'code' in error && error.code === '23505'
   }
-
-  // findByLastname
-  async findByLastname(lastname: string): Promise<PatientResponseDto[]> {
-    const patients = await this.patientModel.find({ lastname }).select('-_id').lean()
-    return patients.map(mapPatientToDto)
-  }
-
-  // getUserByPatientId
 }

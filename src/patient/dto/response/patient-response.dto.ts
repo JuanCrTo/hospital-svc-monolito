@@ -9,9 +9,15 @@ export class LocationHistoryItemDto {
 
   @ApiProperty({ example: -99.1332, required: false, nullable: true })
   longitude?: number
+
+  @ApiProperty({ example: '2026-10-24T15:00:00.000Z', required: false })
+  updatedAt?: Date
 }
 
 export class PatientResponseDto {
+  @ApiProperty({ format: 'uuid' })
+  id: string
+
   @ApiProperty({ example: '1234567890' })
   identification: string
 

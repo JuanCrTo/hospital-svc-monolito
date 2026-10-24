@@ -1,14 +1,15 @@
 import { ApiProperty } from '@nestjs/swagger'
-import { IsDateString, IsNotEmpty, IsString } from 'class-validator'
+import { IsDateString, IsNotEmpty, IsString, MaxLength } from 'class-validator'
 import { IsPastInDate } from 'src/decorators/validation/isPastInDate.decorator'
 
-export class CreatePatientDto {
+export class CreatePatientRequestDto {
   @ApiProperty({
     description: 'The identification of the patient',
     example: '1234567890'
   })
   @IsNotEmpty({ message: 'Identification  is required' })
   @IsString({ message: 'Identification  must be a string' })
+  @MaxLength(40)
   identification: string
 
   @ApiProperty({
@@ -17,6 +18,7 @@ export class CreatePatientDto {
   })
   @IsNotEmpty({ message: 'Firstname is required' })
   @IsString({ message: 'Firstname must be a string' })
+  @MaxLength(120)
   firstname: string
 
   @ApiProperty({
@@ -25,6 +27,7 @@ export class CreatePatientDto {
   })
   @IsNotEmpty({ message: 'Middlename is required' })
   @IsString({ message: 'Middlename must be a string' })
+  @MaxLength(120)
   middlename: string
 
   @ApiProperty({
@@ -33,6 +36,7 @@ export class CreatePatientDto {
   })
   @IsNotEmpty({ message: 'Lastname is required' })
   @IsString({ message: 'Lastname must be a string' })
+  @MaxLength(120)
   lastname: string
 
   @ApiProperty({
@@ -41,6 +45,7 @@ export class CreatePatientDto {
   })
   @IsNotEmpty({ message: 'Second Lastname is required' })
   @IsString({ message: 'Second Lastname must be a string' })
+  @MaxLength(120)
   secondlastname: string
 
   @ApiProperty({
@@ -54,13 +59,12 @@ export class CreatePatientDto {
   })
   birth: string
 
-  // [0]/formatted_address
-  // formatted_address/types: street_address
   @ApiProperty({
     description: 'The address of the patient',
     example: 'apex las vegas'
   })
   @IsNotEmpty({ message: 'Location is required' })
   @IsString({ message: 'Location must be a string' })
+  @MaxLength(500)
   location: string
 }

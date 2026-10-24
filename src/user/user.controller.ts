@@ -23,8 +23,8 @@ export class UserController {
   @ApiStandardResponse(UserDetailsResponseDto, 201)
   @ApiStandardError()
   @ApiBody({ description: 'User data', type: CreateUserDto })
-  async createUser(@Body() createUserDto: CreateUserDto): Promise<UserDetailsResponseDto> {
-    return this.userService.create(createUserDto)
+  async createUser(@CurrentUser() ctx: AuthContext, @Body() createUserDto: CreateUserDto): Promise<UserDetailsResponseDto> {
+    return this.userService.createForTenant(createUserDto, ctx.tenantId)
   }
 
   @ApiBearerAuth('JWT-auth')

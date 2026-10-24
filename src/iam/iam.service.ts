@@ -510,7 +510,7 @@ export class IamService {
     if (rawToken) {
       await this.sendInvitationLink(dto.email, rawToken)
     } else {
-      await this.emailService.sendEmailWelcome(membership.userId)
+      await this.emailService.sendEmailWelcome(membership.userId, membership.tenantId)
     }
 
     return {

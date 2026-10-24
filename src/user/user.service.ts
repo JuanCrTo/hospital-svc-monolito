@@ -1,14 +1,15 @@
 import { ConflictException, Injectable } from '@nestjs/common'
 import { InjectRepository } from '@nestjs/typeorm'
+import { IsNull } from 'typeorm'
 import { In, Repository } from 'typeorm'
 import { CreateUserDto } from './dto/request/create-user-request.dto'
 import { UserEntity } from './model/user.entity'
 import { hashPassword } from 'src/utils/utils'
 import { PatientService } from 'src/patient/patient.service'
 import { USER_ROLES } from './enums/user-role.enum'
-import { CreatePatientDto } from 'src/patient/dto/request/create-patient-request.dto'
 import { EmailService } from 'src/email/email.service'
 import { Membership } from 'src/iam/model/membership.entity'
+import { RefreshToken } from 'src/iam/model/refresh-token.entity'
 import { UserDetailsResponseDto } from './dto/response/user-details-response.dto'
 import { UserResumenResponseDto } from './dto/response/user-resumen-response.dto'
 import { mapUserDetailsToDto } from './mapper/user-details-response.mapper'
@@ -24,25 +25,27 @@ export class UserService {
     private readonly userRepository: Repository<UserEntity>,
     @InjectRepository(Membership)
     private readonly membershipRepository: Repository<Membership>,
+    @InjectRepository(RefreshToken)
+    private readonly refreshTokenRepository: Repository<RefreshToken>,
     private readonly patientService: PatientService,
     private readonly emailService: EmailService
   ) {}
 
-  async create(createUserDto: CreateUserDto): Promise<UserDetailsResponseDto> {
+  async createForTenant(createUserDto: CreateUserDto, tenantId: string): Promise<UserDetailsResponseDto> {
     const userId = await this.createRaw(createUserDto)
 
     let patientDetails = undefined
-    if (createUserDto.role === 'patient' && createUserDto.patientDetails) {
-      const createPatientDto: CreatePatientDto & { userId: string } = {
-        ...createUserDto.patientDetails,
-        userId
+    try {
+      await this.membershipRepository.save(this.membershipRepository.create({ userId, tenantId }))
+      if (createUserDto.role === 'patient' && createUserDto.patientDetails) {
+        patientDetails = await this.patientService.create(createUserDto.patientDetails, tenantId, userId)
       }
-      await this.patientService.create(createPatientDto)
-      const patient = await this.patientService.findByUserId(userId)
-      patientDetails = mapPatientToDto(patient)
+    } catch (error) {
+      await this.userRepository.delete(userId)
+      throw error
     }
 
-    await this.emailService.sendEmailWelcome(userId)
+    await this.emailService.sendEmailWelcome(userId, tenantId)
 
     return mapUserDetailsToDto({
       email: createUserDto.email,
@@ -67,7 +70,7 @@ export class UserService {
     return saved.id
   }
 
-  async findById(id: string): Promise<UserDetailsResponseDto> {
+  async findById(id: string, tenantId?: string): Promise<UserDetailsResponseDto> {
     if (!UUID_PATTERN.test(id)) return null
 
     const user = await this.userRepository.findOne({ where: { id } })
@@ -75,7 +78,7 @@ export class UserService {
 
     let patientDetails = undefined
     if (user.role === 'patient') {
-      const patient = await this.patientService.findByUserId(id)
+      const patient = await this.patientService.findByUserId(id, tenantId)
       if (patient) {
         patientDetails = mapPatientToDto(patient)
       }
@@ -90,13 +93,13 @@ export class UserService {
 
   async findByIdForTenant(id: string, tenantId: string): Promise<UserDetailsResponseDto> {
     if (!(await this.isTenantMember(id, tenantId))) return null
-    return this.findById(id)
+    return this.findById(id, tenantId)
   }
 
   async findByEmailForTenant(email: string, tenantId: string): Promise<UserDetailsResponseDto> {
     const user = await this.userRepository.findOne({ where: { email } })
     if (!user || !(await this.isTenantMember(user.id, tenantId))) return null
-    return this.findByEmailDto(email)
+    return this.findByEmailDto(email, tenantId)
   }
 
   async findAllForTenant(tenantId: string): Promise<UserResumenResponseDto[]> {
@@ -117,7 +120,9 @@ export class UserService {
 
   async deleteForTenant(id: string, tenantId: string): Promise<boolean> {
     if (!(await this.isTenantMember(id, tenantId))) return false
-    await this.delete(id)
+    await this.patientService.deleteByUserAndTenant(id, tenantId)
+    await this.refreshTokenRepository.update({ userId: id, tenantId, revokedAt: IsNull() }, { revokedAt: new Date() })
+    await this.membershipRepository.delete({ userId: id, tenantId })
     return true
   }
 
@@ -130,13 +135,13 @@ export class UserService {
     return this.userRepository.findOne({ where: { email } })
   }
 
-  async findByEmailDto(email: string): Promise<UserDetailsResponseDto> {
+  async findByEmailDto(email: string, tenantId?: string): Promise<UserDetailsResponseDto> {
     const user = await this.userRepository.findOne({ where: { email } })
     if (!user) return null
 
     let patientDetails = undefined
     if (user.role === USER_ROLES[2]) {
-      const patient = await this.patientService.findByUserId(user.id)
+      const patient = await this.patientService.findByUserId(user.id, tenantId)
       if (patient) {
         patientDetails = mapPatientToDto(patient)
       }
@@ -147,22 +152,6 @@ export class UserService {
       role: user.role,
       patientDetails
     })
-  }
-
-  async findAll(): Promise<UserResumenResponseDto[]> {
-    const users = await this.userRepository.find()
-    return users.map(mapUserResumenToDto)
-  }
-
-  async delete(id: string): Promise<void> {
-    const user = await this.findByIdRaw(id)
-    if (!user) return
-
-    if (user.role === USER_ROLES[2]) {
-      await this.patientService.delete(user.id)
-    }
-
-    await this.userRepository.delete(user.id)
   }
 
   private async isTenantMember(userId: string, tenantId: string): Promise<boolean> {
