@@ -10,6 +10,7 @@ RUN npm ci
 FROM node:20-bookworm-slim AS development
 WORKDIR /usr/src/app
 ENV NODE_ENV=development
+RUN apt-get update && apt-get install -y --no-install-recommends procps && rm -rf /var/lib/apt/lists/*
 COPY --chown=node:node --from=deps /usr/src/app/node_modules ./node_modules
 COPY --chown=node:node . .
 USER node

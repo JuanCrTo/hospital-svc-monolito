@@ -8,6 +8,7 @@ import { APP_GUARD } from '@nestjs/core'
 import { AuthGuard } from './auth.guard'
 import { EmailModule } from '../email/email.module'
 import { IamModule } from '../iam/iam.module'
+import { PermissionsGuard } from '../common/guards/permissions.guard'
 
 @Module({
   imports: [
@@ -20,6 +21,6 @@ import { IamModule } from '../iam/iam.module'
     })
   ],
   controllers: [AuthController],
-  providers: [AuthService, { provide: APP_GUARD, useClass: AuthGuard }]
+  providers: [AuthService, { provide: APP_GUARD, useClass: AuthGuard }, { provide: APP_GUARD, useExisting: PermissionsGuard }]
 })
 export class AuthModule {}

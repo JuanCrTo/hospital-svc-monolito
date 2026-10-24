@@ -21,6 +21,9 @@ export class UserEntity {
   @Column({ type: 'varchar', length: 20, default: 'active' })
   status: UserStatus
 
+  @Column({ name: 'is_platform_admin', type: 'boolean', default: false })
+  isPlatformAdmin: boolean
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date
 

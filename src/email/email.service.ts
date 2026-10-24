@@ -4,7 +4,7 @@ import { ConfigService } from '@nestjs/config'
 import { PatientService } from 'src/patient/patient.service'
 import { UserService } from 'src/user/user.service'
 import { RabbitMQService } from 'src/rabbitmq/rabbitmq.service'
-import { ForgotPasswordEmailData, WelcomeEmailData } from 'src/email/interfaces/email.interface'
+import { ForgotPasswordEmailData, InvitationEmailData, WelcomeEmailData } from 'src/email/interfaces/email.interface'
 
 @Injectable()
 export class EmailService {
@@ -44,6 +44,22 @@ export class EmailService {
     } catch (error) {
       console.error('Error queuing forgot password email:', error)
       throw error
+    }
+  }
+
+  async sendInvitationEmail(email: string, inviteLink: string): Promise<{ message: string; emailSentTo: string }> {
+    const emailData: InvitationEmailData = {
+      type: 'invitation',
+      to: email,
+      subject: 'Invitación al Hospital Yellow',
+      inviteLink
+    }
+
+    await this.rabbitMQService.publish(RabbitMQService.QUEUES.INVITATION, emailData)
+
+    return {
+      message: 'Invitation email queued successfully',
+      emailSentTo: email
     }
   }
 

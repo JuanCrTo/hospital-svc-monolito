@@ -17,6 +17,7 @@ export interface RotatedRefreshToken {
   tenantId: string | null
   facilityId: string | null
   refreshToken: string
+  isPlatformAdmin: boolean
 }
 
 @Injectable()
@@ -77,7 +78,8 @@ export class RefreshTokenService {
       userId: user.id,
       tenantId: current.tenantId,
       facilityId: current.facilityId,
-      refreshToken: next.token
+      refreshToken: next.token,
+      isPlatformAdmin: user.isPlatformAdmin === true
     }
   }
 

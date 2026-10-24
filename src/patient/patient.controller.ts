@@ -1,8 +1,8 @@
 import { Body, Controller, Get, HttpCode, Param, Patch, Query } from '@nestjs/common'
 import { PatientService } from './patient.service'
 import { UpdatePatientDto } from './dto/request/update-user-request.dto'
-import { Public } from 'src/decorators/request/public.decorator'
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiQuery } from '@nestjs/swagger'
+import { RequirePermission } from 'src/decorators/request/require-permission.decorator'
 import { ApiStandardError } from 'src/decorators/swagger/error.decorator'
 import { ApiStandardResponse } from 'src/decorators/swagger/response.decorator'
 import { PatientResponseDto } from './dto/response/patient-response.dto'
@@ -11,8 +11,9 @@ import { PatientResponseDto } from './dto/response/patient-response.dto'
 export class PatientController {
   constructor(private readonly patientService: PatientService) {}
 
-  @Public()
+  @ApiBearerAuth('JWT-auth')
   @Get()
+  @RequirePermission('patient:read')
   @HttpCode(200)
   @ApiOperation({ summary: 'Get all patients or filter by query params' })
   @ApiQuery({ name: 'identification', required: false, description: 'Filter by identification' })
@@ -37,6 +38,7 @@ export class PatientController {
 
   @ApiBearerAuth('JWT-auth')
   @Get(':id')
+  @RequirePermission('patient:read')
   @HttpCode(200)
   @ApiOperation({ summary: 'Get patient by ID' })
   @ApiStandardResponse(PatientResponseDto, 200)
@@ -47,6 +49,7 @@ export class PatientController {
 
   @ApiBearerAuth('JWT-auth')
   @Patch(':id')
+  @RequirePermission('patient:write')
   @HttpCode(200)
   @ApiOperation({ summary: 'Update a patient by ID' })
   @ApiStandardResponse(PatientResponseDto, 200)

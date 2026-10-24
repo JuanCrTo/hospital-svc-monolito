@@ -3,4 +3,5 @@ export interface AuthContext {
   tenantId: string | null
   facilityId: string | null
   permissionsVersion: number | null
+  isPlatformAdmin: boolean
 }

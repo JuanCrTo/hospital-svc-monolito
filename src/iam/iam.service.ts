@@ -1,7 +1,12 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
+import { ConfigService } from '@nestjs/config'
+import { createHash, randomBytes } from 'crypto'
 import { InjectRepository } from '@nestjs/typeorm'
-import { DataSource, In, Repository } from 'typeorm'
+import { DataSource, In, IsNull, Repository } from 'typeorm'
 import { AuditService } from 'src/common/logging/audit/audit.service'
+import { getLogContext } from 'src/common/logging/log-context.storage'
+import { EmailService } from 'src/email/email.service'
+import { hashPassword } from 'src/utils/utils'
 import { Facility } from 'src/facility/model/facility.entity'
 import { Tenant } from 'src/tenant/model/tenant.entity'
 import { UserEntity } from 'src/user/model/user.entity'
@@ -10,17 +15,22 @@ import { AssignFacilityRequestDto } from './dto/request/assign-facility-request.
 import { AssignRoleRequestDto } from './dto/request/assign-role-request.dto'
 import { CreateDepartmentRequestDto } from './dto/request/create-department-request.dto'
 import { CreateFacilityRequestDto } from './dto/request/create-facility-request.dto'
+import { CreateInvitationRequestDto } from './dto/request/create-invitation-request.dto'
 import { CreateMembershipRequestDto } from './dto/request/create-membership-request.dto'
 import { CreateRoleRequestDto } from './dto/request/create-role-request.dto'
+import { CreateTenantRequestDto, UpdateTenantRequestDto } from './dto/request/create-tenant-request.dto'
 import { UpdateDepartmentRequestDto } from './dto/request/update-department-request.dto'
 import { UpdateFacilityRequestDto } from './dto/request/update-facility-request.dto'
 import { UpdateMembershipStatusRequestDto } from './dto/request/update-membership-status-request.dto'
 import { UpdateRoleRequestDto } from './dto/request/update-role-request.dto'
 import { DepartmentResponseDto } from './dto/response/department-response.dto'
+import { InvitationResponseDto } from './dto/response/invitation-response.dto'
+import { ResolvedPermissionsResponseDto } from './dto/response/resolved-permissions-response.dto'
 import { FacilityResponseDto } from './dto/response/facility-response.dto'
 import { MembershipResponseDto } from './dto/response/membership-response.dto'
 import { PermissionResponseDto } from './dto/response/permission-response.dto'
 import { RoleResponseDto } from './dto/response/role-response.dto'
+import { TenantResponseDto } from './dto/response/tenant-response.dto'
 import { AuthContext } from './interfaces/auth-context.interface'
 import { IamAccessService } from './iam-access.service'
 import { mapDepartmentToDto } from './mapper/department-response.mapper'
@@ -28,6 +38,7 @@ import { mapFacilityToDto } from './mapper/facility-response.mapper'
 import { mapMembershipToDto } from './mapper/membership-response.mapper'
 import { mapPermissionToDto } from './mapper/permission-response.mapper'
 import { mapRoleToDto } from './mapper/role-response.mapper'
+import { mapTenantToDto } from './mapper/tenant-response.mapper'
 import { Department } from './model/department.entity'
 import { FacilityAssignment } from './model/facility-assignment.entity'
 import { MembershipRole } from './model/membership-role.entity'
@@ -36,6 +47,9 @@ import { Permission } from './model/permission.entity'
 import { RefreshTokenService } from './refresh-token.service'
 import { RolePermission } from './model/role-permission.entity'
 import { Role } from './model/role.entity'
+import { UserInvitation } from './model/user-invitation.entity'
+
+const INVITATION_TTL_MS = 72 * 60 * 60 * 1000
 
 export interface AvailableContext {
   tenantId: string
@@ -64,13 +78,17 @@ export class IamService {
     private readonly membershipRoleRepository: Repository<MembershipRole>,
     @InjectRepository(FacilityAssignment)
     private readonly facilityAssignmentRepository: Repository<FacilityAssignment>,
+    @InjectRepository(UserInvitation)
+    private readonly invitationRepository: Repository<UserInvitation>,
     @InjectRepository(UserEntity)
     private readonly userRepository: Repository<UserEntity>,
     private readonly dataSource: DataSource,
     private readonly accessService: IamAccessService,
     private readonly userService: UserService,
     private readonly refreshTokenService: RefreshTokenService,
-    private readonly auditService: AuditService
+    private readonly auditService: AuditService,
+    private readonly emailService: EmailService,
+    private readonly configService: ConfigService
   ) {}
 
   async getCurrentTenant(ctx: AuthContext): Promise<Tenant> {
@@ -78,6 +96,75 @@ export class IamService {
     const tenant = await this.tenantRepository.findOne({ where: { id: tenantId } })
     if (!tenant) throw new NotFoundException('Tenant not found')
     return tenant
+  }
+
+  async listTenants(): Promise<TenantResponseDto[]> {
+    const tenants = await this.tenantRepository.find({ order: { name: 'ASC' } })
+    return tenants.map(mapTenantToDto)
+  }
+
+  async getTenantById(id: string): Promise<TenantResponseDto> {
+    const tenant = await this.tenantRepository.findOne({ where: { id } })
+    if (!tenant) throw new NotFoundException('Tenant not found')
+    return mapTenantToDto(tenant)
+  }
+
+  async createTenant(dto: CreateTenantRequestDto): Promise<TenantResponseDto> {
+    const duplicated = await this.tenantRepository.findOne({ where: { slug: dto.slug } })
+    if (duplicated) throw new ConflictException('Tenant slug already exists')
+
+    const tenant = await this.dataSource.transaction(async manager => {
+      const saved = await manager.save(
+        manager.create(Tenant, {
+          name: dto.name,
+          slug: dto.slug,
+          status: dto.status ?? 'active'
+        })
+      )
+      if (dto.initialFacility) {
+        await manager.save(
+          manager.create(Facility, {
+            tenantId: saved.id,
+            name: dto.initialFacility.name,
+            code: dto.initialFacility.code,
+            timezone: dto.initialFacility.timezone ?? 'America/Bogota',
+            status: 'active'
+          })
+        )
+      }
+      return saved
+    })
+
+    await this.auditService.record({
+      action: 'CREATE',
+      resourceType: 'tenant',
+      resourceId: tenant.id,
+      tenantId: tenant.id,
+      afterSummary: { name: tenant.name, slug: tenant.slug, status: tenant.status }
+    })
+
+    return mapTenantToDto(tenant)
+  }
+
+  async updateTenant(id: string, dto: UpdateTenantRequestDto): Promise<TenantResponseDto> {
+    const tenant = await this.tenantRepository.findOne({ where: { id } })
+    if (!tenant) throw new NotFoundException('Tenant not found')
+    const before = { name: tenant.name, status: tenant.status }
+
+    if (dto.name !== undefined) tenant.name = dto.name
+    if (dto.status !== undefined) tenant.status = dto.status
+    const saved = await this.tenantRepository.save(tenant)
+
+    await this.auditService.record({
+      action: 'UPDATE',
+      resourceType: 'tenant',
+      resourceId: saved.id,
+      tenantId: saved.id,
+      beforeSummary: before,
+      afterSummary: { name: saved.name, status: saved.status }
+    })
+
+    return mapTenantToDto(saved)
   }
 
   async listFacilities(ctx: AuthContext): Promise<FacilityResponseDto[]> {
@@ -340,6 +427,161 @@ export class IamService {
     return this.membershipResponse(membership)
   }
 
+  async inviteMember(ctx: AuthContext, dto: CreateInvitationRequestDto): Promise<InvitationResponseDto> {
+    const tenantId = this.requireTenant(ctx)
+    const roles = dto.roleIds?.length ? await this.findRolesByIds(tenantId, dto.roleIds) : []
+    const facilities = dto.facilityIds?.length ? await this.findFacilitiesByIds(tenantId, dto.facilityIds) : []
+
+    const user = await this.userService.findByEmailRaw(dto.email)
+    if (user) {
+      const existing = await this.membershipRepository.findOne({ where: { userId: user.id, tenantId } })
+      if (existing) {
+        if (user.status === 'active') throw new ConflictException('User already belongs to this tenant')
+        const invitation = await this.createInvitation(user.id, tenantId, ctx.userId)
+        await this.sendInvitationLink(user.email, invitation.token)
+        return {
+          membership: await this.membershipResponse(existing),
+          invitationSent: true,
+          expiresAt: invitation.expiresAt
+        }
+      }
+    }
+
+    let rawToken: string | null = null
+    let expiresAt: Date | null = null
+
+    const membership = await this.dataSource.transaction(async manager => {
+      let userId = user?.id
+      if (!userId) {
+        const created = await manager.save(
+          manager.create(UserEntity, {
+            email: dto.email,
+            passwordHash: await hashPassword(randomBytes(32).toString('hex')),
+            role: dto.role ?? 'doctor',
+            status: 'inactive',
+            isPlatformAdmin: false
+          })
+        )
+        userId = created.id
+      }
+
+      const saved = await manager.save(manager.create(Membership, { userId, tenantId }))
+      if (roles.length > 0) {
+        await manager.insert(
+          MembershipRole,
+          roles.map(role => ({ membershipId: saved.id, roleId: role.id, facilityId: null }))
+        )
+      }
+      if (facilities.length > 0) {
+        await manager.insert(
+          FacilityAssignment,
+          facilities.map(facility => ({ membershipId: saved.id, facilityId: facility.id }))
+        )
+      }
+
+      if (!user || user.status !== 'active') {
+        rawToken = randomBytes(32).toString('base64url')
+        expiresAt = new Date(Date.now() + INVITATION_TTL_MS)
+        await manager.insert(UserInvitation, {
+          userId,
+          tenantId,
+          tokenHash: this.hashToken(rawToken),
+          expiresAt,
+          createdBy: ctx.userId
+        })
+      }
+
+      return saved
+    })
+
+    await this.auditService.record({
+      action: 'CREATE',
+      resourceType: 'membership',
+      resourceId: membership.id,
+      afterSummary: {
+        userId: membership.userId,
+        tenantId,
+        roleIds: roles.map(role => role.id),
+        facilityIds: facilities.map(facility => facility.id),
+        invitationSent: rawToken !== null
+      }
+    })
+
+    if (rawToken) {
+      await this.sendInvitationLink(dto.email, rawToken)
+    } else {
+      await this.emailService.sendEmailWelcome(membership.userId)
+    }
+
+    return {
+      membership: await this.membershipResponse(membership),
+      invitationSent: rawToken !== null,
+      expiresAt
+    }
+  }
+
+  async acceptInvitation(rawToken: string, password: string): Promise<void> {
+    const tokenHash = this.hashToken(rawToken)
+
+    const accepted = await this.dataSource.transaction(async manager => {
+      const invitation = await manager.findOne(UserInvitation, {
+        where: { tokenHash },
+        lock: { mode: 'pessimistic_write' }
+      })
+      if (!invitation || invitation.acceptedAt || invitation.revokedAt || invitation.expiresAt.getTime() <= Date.now()) {
+        throw new BadRequestException('Invalid or expired invitation')
+      }
+
+      const user = await manager.findOne(UserEntity, { where: { id: invitation.userId } })
+      if (!user || user.status === 'locked') throw new BadRequestException('Invalid invitation')
+
+      const claimed = await manager.update(
+        UserInvitation,
+        { id: invitation.id, acceptedAt: IsNull(), revokedAt: IsNull() },
+        { acceptedAt: new Date() }
+      )
+      if (claimed.affected !== 1) throw new BadRequestException('Invalid or expired invitation')
+
+      user.passwordHash = await hashPassword(password)
+      if (user.status !== 'active') user.status = 'active'
+      await manager.save(user)
+
+      await manager.update(
+        UserInvitation,
+        { userId: user.id, tenantId: invitation.tenantId, acceptedAt: IsNull(), revokedAt: IsNull() },
+        { revokedAt: new Date() }
+      )
+
+      return { user, tenantId: invitation.tenantId }
+    })
+
+    const logContext = getLogContext()
+    if (logContext) {
+      logContext.actorUserId = accepted.user.id
+      logContext.tenantId = accepted.tenantId
+      logContext.facilityId = null
+      logContext.isPlatformAdmin = accepted.user.isPlatformAdmin === true
+    }
+
+    await this.auditService.record({
+      action: 'UPDATE',
+      resourceType: 'user',
+      resourceId: accepted.user.id,
+      tenantId: accepted.tenantId,
+      afterSummary: { invitationAccepted: true }
+    })
+  }
+
+  async getResolvedPermissions(ctx: AuthContext): Promise<ResolvedPermissionsResponseDto> {
+    const tenantId = this.requireTenant(ctx)
+    const resolved = await this.accessService.resolve(ctx.userId, tenantId, ctx.facilityId)
+    if (!resolved) throw new ForbiddenException('No active membership for this context')
+    return {
+      permissions: Array.from(resolved.permissions).sort(),
+      grants: resolved.grants
+    }
+  }
+
   async updateMembershipStatus(ctx: AuthContext, id: string, dto: UpdateMembershipStatusRequestDto): Promise<MembershipResponseDto> {
     const membership = await this.findMembership(ctx, id)
     const before = { status: membership.status }
@@ -443,31 +685,33 @@ export class IamService {
   }
 
   async listAvailableContexts(userId: string): Promise<AvailableContext[]> {
-    const memberships = await this.membershipRepository.find({ where: { userId, status: 'active' } })
-    const contexts: AvailableContext[] = []
+    return this.dataSource.transaction(async manager => {
+      await manager.query(`SELECT set_config('app.user_id', $1, true)`, [userId])
 
-    for (const membership of memberships) {
-      const assignments = await this.facilityAssignmentRepository.find({
-        where: { membershipId: membership.id, status: 'active' }
-      })
-      if (assignments.length === 0) {
-        contexts.push({
-          tenantId: membership.tenantId,
-          facilityId: null,
-          permissionsVersion: membership.permissionsVersion
-        })
-        continue
-      }
-      for (const assignment of assignments) {
-        contexts.push({
-          tenantId: membership.tenantId,
-          facilityId: assignment.facilityId,
-          permissionsVersion: membership.permissionsVersion
-        })
-      }
-    }
+      const memberships = await manager.getRepository(Membership).find({ where: { userId, status: 'active' } })
+      const contexts: AvailableContext[] = []
 
-    return contexts
+      for (const membership of memberships) {
+        const assignments = await manager.getRepository(FacilityAssignment).find({ where: { membershipId: membership.id, status: 'active' } })
+        if (assignments.length === 0) {
+          contexts.push({
+            tenantId: membership.tenantId,
+            facilityId: null,
+            permissionsVersion: membership.permissionsVersion
+          })
+          continue
+        }
+        for (const assignment of assignments) {
+          contexts.push({
+            tenantId: membership.tenantId,
+            facilityId: assignment.facilityId,
+            permissionsVersion: membership.permissionsVersion
+          })
+        }
+      }
+
+      return contexts
+    })
   }
 
   async getContext(userId: string, tenantId: string, facilityId: string | null) {
@@ -476,8 +720,41 @@ export class IamService {
     return {
       membership: resolved.membership,
       permissionsVersion: resolved.membership.permissionsVersion,
-      permissions: resolved.permissions
+      permissions: resolved.permissions,
+      grants: resolved.grants
     }
+  }
+
+  private async findFacilitiesByIds(tenantId: string, ids: string[]): Promise<Facility[]> {
+    const facilities = await this.facilityRepository.find({
+      where: { tenantId, id: In(ids), status: 'active' }
+    })
+    if (facilities.length !== new Set(ids).size) throw new BadRequestException('Invalid facility id')
+    return facilities
+  }
+
+  private async createInvitation(userId: string, tenantId: string, createdBy: string): Promise<{ token: string; expiresAt: Date }> {
+    await this.invitationRepository.update({ userId, tenantId, acceptedAt: IsNull(), revokedAt: IsNull() }, { revokedAt: new Date() })
+
+    const token = randomBytes(32).toString('base64url')
+    const expiresAt = new Date(Date.now() + INVITATION_TTL_MS)
+    await this.invitationRepository.insert({
+      userId,
+      tenantId,
+      tokenHash: this.hashToken(token),
+      expiresAt,
+      createdBy
+    })
+    return { token, expiresAt }
+  }
+
+  private async sendInvitationLink(email: string, token: string): Promise<void> {
+    const baseUrl = this.configService.get<string>('LOCAL_URL') ?? ''
+    await this.emailService.sendInvitationEmail(email, `${baseUrl}/accept-invitation?token=${encodeURIComponent(token)}`)
+  }
+
+  private hashToken(token: string): string {
+    return createHash('sha256').update(token).digest('hex')
   }
 
   private requireTenant(ctx: AuthContext): string {

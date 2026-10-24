@@ -1,14 +1,15 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, UseGuards } from '@nestjs/common'
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } from '@nestjs/common'
 import { ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger'
 import { CurrentUser } from 'src/decorators/request/current-user.decorator'
+import { AuthenticatedOnly } from 'src/decorators/request/authenticated-only.decorator'
 import { RequirePermission } from 'src/decorators/request/require-permission.decorator'
 import { ApiStandardError } from 'src/decorators/swagger/error.decorator'
 import { ApiStandardResponse } from 'src/decorators/swagger/response.decorator'
-import { PermissionsGuard } from 'src/common/guards/permissions.guard'
 import { AssignFacilityRequestDto } from './dto/request/assign-facility-request.dto'
 import { AssignRoleRequestDto } from './dto/request/assign-role-request.dto'
 import { CreateDepartmentRequestDto } from './dto/request/create-department-request.dto'
 import { CreateFacilityRequestDto } from './dto/request/create-facility-request.dto'
+import { CreateInvitationRequestDto } from './dto/request/create-invitation-request.dto'
 import { CreateMembershipRequestDto } from './dto/request/create-membership-request.dto'
 import { CreateRoleRequestDto } from './dto/request/create-role-request.dto'
 import { UpdateDepartmentRequestDto } from './dto/request/update-department-request.dto'
@@ -17,8 +18,10 @@ import { UpdateMembershipStatusRequestDto } from './dto/request/update-membershi
 import { UpdateRoleRequestDto } from './dto/request/update-role-request.dto'
 import { DepartmentResponseDto } from './dto/response/department-response.dto'
 import { FacilityResponseDto } from './dto/response/facility-response.dto'
+import { InvitationResponseDto } from './dto/response/invitation-response.dto'
 import { MembershipResponseDto } from './dto/response/membership-response.dto'
 import { PermissionResponseDto } from './dto/response/permission-response.dto'
+import { ResolvedPermissionsResponseDto } from './dto/response/resolved-permissions-response.dto'
 import { RoleResponseDto } from './dto/response/role-response.dto'
 import { TenantResponseDto } from './dto/response/tenant-response.dto'
 import { IamService } from './iam.service'
@@ -26,7 +29,6 @@ import { AuthContext } from './interfaces/auth-context.interface'
 import { mapTenantToDto } from './mapper/tenant-response.mapper'
 
 @ApiBearerAuth('JWT-auth')
-@UseGuards(PermissionsGuard)
 @Controller('iam')
 export class IamController {
   constructor(private readonly iamService: IamService) {}
@@ -39,6 +41,16 @@ export class IamController {
   @ApiStandardError()
   async getTenant(@CurrentUser() ctx: AuthContext): Promise<TenantResponseDto> {
     return mapTenantToDto(await this.iamService.getCurrentTenant(ctx))
+  }
+
+  @Get('me/permissions')
+  @HttpCode(200)
+  @AuthenticatedOnly()
+  @ApiOperation({ summary: 'Get the permissions resolved for the active membership and facility' })
+  @ApiStandardResponse(ResolvedPermissionsResponseDto, 200)
+  @ApiStandardError()
+  getResolvedPermissions(@CurrentUser() ctx: AuthContext): Promise<ResolvedPermissionsResponseDto> {
+    return this.iamService.getResolvedPermissions(ctx)
   }
 
   @Get('facilities')
@@ -194,6 +206,16 @@ export class IamController {
   @ApiStandardError()
   getMembership(@CurrentUser() ctx: AuthContext, @Param('id') id: string): Promise<MembershipResponseDto> {
     return this.iamService.getMembership(ctx, id)
+  }
+
+  @Post('invitations')
+  @HttpCode(201)
+  @RequirePermission('membership:write')
+  @ApiOperation({ summary: 'Invite a user to the tenant with initial roles and facilities' })
+  @ApiStandardResponse(InvitationResponseDto, 201)
+  @ApiStandardError()
+  inviteMember(@CurrentUser() ctx: AuthContext, @Body() dto: CreateInvitationRequestDto): Promise<InvitationResponseDto> {
+    return this.iamService.inviteMember(ctx, dto)
   }
 
   @Post('memberships')

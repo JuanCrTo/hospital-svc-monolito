@@ -44,6 +44,7 @@ export class AuthGuard implements CanActivate {
         logContext.actorUserId = payload.userId
         logContext.tenantId = payload.tenantId ?? null
         logContext.facilityId = payload.facilityId ?? null
+        logContext.isPlatformAdmin = payload.isPlatformAdmin === true
       }
     } catch {
       throw new UnauthorizedException()

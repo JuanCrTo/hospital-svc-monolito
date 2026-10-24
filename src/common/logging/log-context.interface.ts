@@ -4,4 +4,5 @@ export interface LogContext {
   actorUserId?: string | null
   tenantId?: string | null
   facilityId?: string | null
+  isPlatformAdmin?: boolean
 }

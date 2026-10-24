@@ -2,6 +2,7 @@ import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from '@
 import { Reflector } from '@nestjs/core'
 import { getLogContext } from '../logging/log-context.storage'
 import { IS_PUBLIC_KEY } from '../../decorators/request/public.decorator'
+import { AUTHENTICATED_ONLY_KEY } from '../../decorators/request/authenticated-only.decorator'
 import { PERMISSIONS_KEY } from '../../decorators/request/require-permission.decorator'
 import { AuthContext } from '../../iam/interfaces/auth-context.interface'
 import { IamAccessService } from '../../iam/iam-access.service'
@@ -17,14 +18,30 @@ export class PermissionsGuard implements CanActivate {
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [ctx.getHandler(), ctx.getClass()])
     if (isPublic) return true
 
+    const request = ctx.switchToHttp().getRequest()
+    const token = request.user
+    if (!token?.userId) {
+      throw new ForbiddenException('Authentication is required')
+    }
+
+    const authenticatedOnly = this.reflector.getAllAndOverride<boolean>(AUTHENTICATED_ONLY_KEY, [ctx.getHandler(), ctx.getClass()])
+    if (authenticatedOnly) {
+      request.auth = {
+        userId: token.userId,
+        tenantId: token.tenantId ?? null,
+        facilityId: token.facilityId ?? null,
+        permissionsVersion: token.permissionsVersion ?? null,
+        isPlatformAdmin: token.isPlatformAdmin === true
+      }
+      return true
+    }
+
     const required = this.reflector.getAllAndOverride<string[]>(PERMISSIONS_KEY, [ctx.getHandler(), ctx.getClass()])
     if (!required || required.length === 0) {
       throw new ForbiddenException('No permission metadata defined for this route')
     }
 
-    const request = ctx.switchToHttp().getRequest()
-    const token = request.user
-    if (!token?.userId || !token?.tenantId) {
+    if (!token.tenantId) {
       throw new ForbiddenException('Active tenant context is required')
     }
 
@@ -46,7 +63,8 @@ export class PermissionsGuard implements CanActivate {
       userId: token.userId,
       tenantId: token.tenantId,
       facilityId: token.facilityId ?? null,
-      permissionsVersion: resolved.membership.permissionsVersion
+      permissionsVersion: resolved.membership.permissionsVersion,
+      isPlatformAdmin: token.isPlatformAdmin === true
     }
     request.auth = authContext
 
@@ -55,6 +73,7 @@ export class PermissionsGuard implements CanActivate {
       logContext.actorUserId = authContext.userId
       logContext.tenantId = authContext.tenantId
       logContext.facilityId = authContext.facilityId
+      logContext.isPlatformAdmin = authContext.isPlatformAdmin
     }
 
     return true

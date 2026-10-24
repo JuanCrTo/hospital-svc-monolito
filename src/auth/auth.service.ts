@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config'
 import { JwtService } from '@nestjs/jwt'
 import { EmailService } from 'src/email/email.service'
 import { comparePassword } from 'src/utils/utils'
+import { getLogContext } from 'src/common/logging/log-context.storage'
 import { UserService } from '../user/user.service'
 import { SignInResponseDto } from './dto/response/signIn-auth-response.dto'
 import { IJwtPayload } from './interfaces/jwt-payload.interface'
@@ -32,6 +33,9 @@ export class AuthService {
     const isPasswordValid = await comparePassword(password, user.passwordHash)
     if (!isPasswordValid) throw new UnauthorizedException()
 
+    const logContext = getLogContext()
+    if (logContext) logContext.actorUserId = user.id
+
     const contexts = await this.iamService.listAvailableContexts(user.id)
     const context = contexts.length === 1 ? contexts[0] : null
 
@@ -39,7 +43,8 @@ export class AuthService {
       userId: user.id,
       tenantId: context?.tenantId ?? null,
       facilityId: context?.facilityId ?? null,
-      permissionsVersion: context?.permissionsVersion ?? null
+      permissionsVersion: context?.permissionsVersion ?? null,
+      isPlatformAdmin: user.isPlatformAdmin === true
     })
     const refresh = await this.refreshTokenService.issue(user.id, context?.tenantId ?? null, context?.facilityId ?? null, meta)
 
@@ -67,7 +72,8 @@ export class AuthService {
       userId: rotated.userId,
       tenantId: rotated.tenantId,
       facilityId: rotated.facilityId,
-      permissionsVersion
+      permissionsVersion,
+      isPlatformAdmin: rotated.isPlatformAdmin
     })
 
     return {
@@ -90,14 +96,22 @@ export class AuthService {
     await this.refreshTokenService.revoke(rawToken)
   }
 
+  async acceptInvitation(rawToken: string, password: string): Promise<void> {
+    await this.iamService.acceptInvitation(rawToken, password)
+  }
+
   async selectContext(userId: string, dto: SelectContextRequestDto): Promise<SelectContextResponseDto> {
+    const user = await this.userService.findByIdRaw(userId)
+    if (!user || user.status !== 'active') throw new UnauthorizedException()
+
     const context = await this.iamService.getContext(userId, dto.tenantId, dto.facilityId ?? null)
 
     const accessToken = await this.signAccessToken({
       userId,
       tenantId: dto.tenantId,
       facilityId: dto.facilityId ?? null,
-      permissionsVersion: context.permissionsVersion
+      permissionsVersion: context.permissionsVersion,
+      isPlatformAdmin: user.isPlatformAdmin === true
     })
 
     return {

@@ -1,6 +1,6 @@
 import { ConflictException, Injectable } from '@nestjs/common'
 import { InjectRepository } from '@nestjs/typeorm'
-import { Repository } from 'typeorm'
+import { In, Repository } from 'typeorm'
 import { CreateUserDto } from './dto/request/create-user-request.dto'
 import { UserEntity } from './model/user.entity'
 import { hashPassword } from 'src/utils/utils'
@@ -8,6 +8,7 @@ import { PatientService } from 'src/patient/patient.service'
 import { USER_ROLES } from './enums/user-role.enum'
 import { CreatePatientDto } from 'src/patient/dto/request/create-patient-request.dto'
 import { EmailService } from 'src/email/email.service'
+import { Membership } from 'src/iam/model/membership.entity'
 import { UserDetailsResponseDto } from './dto/response/user-details-response.dto'
 import { UserResumenResponseDto } from './dto/response/user-resumen-response.dto'
 import { mapUserDetailsToDto } from './mapper/user-details-response.mapper'
@@ -21,6 +22,8 @@ export class UserService {
   constructor(
     @InjectRepository(UserEntity)
     private readonly userRepository: Repository<UserEntity>,
+    @InjectRepository(Membership)
+    private readonly membershipRepository: Repository<Membership>,
     private readonly patientService: PatientService,
     private readonly emailService: EmailService
   ) {}
@@ -85,6 +88,39 @@ export class UserService {
     })
   }
 
+  async findByIdForTenant(id: string, tenantId: string): Promise<UserDetailsResponseDto> {
+    if (!(await this.isTenantMember(id, tenantId))) return null
+    return this.findById(id)
+  }
+
+  async findByEmailForTenant(email: string, tenantId: string): Promise<UserDetailsResponseDto> {
+    const user = await this.userRepository.findOne({ where: { email } })
+    if (!user || !(await this.isTenantMember(user.id, tenantId))) return null
+    return this.findByEmailDto(email)
+  }
+
+  async findAllForTenant(tenantId: string): Promise<UserResumenResponseDto[]> {
+    const memberships = await this.membershipRepository.find({
+      where: { tenantId, status: 'active' },
+      select: { userId: true }
+    })
+    const ids = memberships.map(membership => membership.userId)
+    if (ids.length === 0) return []
+    const users = await this.userRepository.find({ where: { id: In(ids) } })
+    return users.map(mapUserResumenToDto)
+  }
+
+  async updatePasswordForTenant(id: string, tenantId: string, password: string): Promise<UserResumenResponseDto> {
+    if (!(await this.isTenantMember(id, tenantId))) return null
+    return this.updatePassword(id, password)
+  }
+
+  async deleteForTenant(id: string, tenantId: string): Promise<boolean> {
+    if (!(await this.isTenantMember(id, tenantId))) return false
+    await this.delete(id)
+    return true
+  }
+
   async findByIdRaw(id: string): Promise<UserEntity | null> {
     if (!UUID_PATTERN.test(id)) return null
     return this.userRepository.findOne({ where: { id } })
@@ -127,6 +163,14 @@ export class UserService {
     }
 
     await this.userRepository.delete(user.id)
+  }
+
+  private async isTenantMember(userId: string, tenantId: string): Promise<boolean> {
+    if (!UUID_PATTERN.test(userId)) return false
+    const membership = await this.membershipRepository.findOne({
+      where: { userId, tenantId, status: 'active' }
+    })
+    return Boolean(membership)
   }
 
   async updatePassword(id: string, password: string): Promise<UserResumenResponseDto> {

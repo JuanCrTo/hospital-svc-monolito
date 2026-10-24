@@ -6,6 +6,7 @@ import { Facility } from 'src/facility/model/facility.entity'
 import { Tenant } from 'src/tenant/model/tenant.entity'
 import { UserEntity } from 'src/user/model/user.entity'
 import { UserModule } from 'src/user/user.module'
+import { EmailModule } from 'src/email/email.module'
 import { Department } from './model/department.entity'
 import { FacilityAssignment } from './model/facility-assignment.entity'
 import { MembershipRole } from './model/membership-role.entity'
@@ -14,8 +15,11 @@ import { Permission } from './model/permission.entity'
 import { RefreshToken } from './model/refresh-token.entity'
 import { RolePermission } from './model/role-permission.entity'
 import { Role } from './model/role.entity'
+import { UserInvitation } from './model/user-invitation.entity'
 import { IamAccessService } from './iam-access.service'
 import { IamController } from './iam.controller'
+import { PlatformController } from './platform.controller'
+import { PlatformAdminGuard } from './platform-admin.guard'
 import { IamService } from './iam.service'
 import { RefreshTokenService } from './refresh-token.service'
 
@@ -32,13 +36,15 @@ import { RefreshTokenService } from './refresh-token.service'
       MembershipRole,
       FacilityAssignment,
       RefreshToken,
+      UserInvitation,
       UserEntity
     ]),
     UserModule,
+    EmailModule,
     LoggerModule
   ],
-  controllers: [IamController],
-  providers: [IamService, IamAccessService, RefreshTokenService, PermissionsGuard],
-  exports: [IamService, IamAccessService, RefreshTokenService]
+  controllers: [IamController, PlatformController],
+  providers: [IamService, IamAccessService, RefreshTokenService, PermissionsGuard, PlatformAdminGuard],
+  exports: [IamService, IamAccessService, RefreshTokenService, PermissionsGuard]
 })
 export class IamModule {}

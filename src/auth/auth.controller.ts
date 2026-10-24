@@ -12,6 +12,8 @@ import { RefreshTokenRequestDto } from './dto/request/refresh-token-auth-request
 import { SelectContextRequestDto } from './dto/request/select-context-auth-request.dto'
 import { SelectContextResponseDto } from './dto/response/select-context-auth-response.dto'
 import { CurrentUser } from 'src/decorators/request/current-user.decorator'
+import { AuthenticatedOnly } from 'src/decorators/request/authenticated-only.decorator'
+import { AcceptInvitationRequestDto } from 'src/iam/dto/request/accept-invitation-request.dto'
 import { AuthContext } from 'src/iam/interfaces/auth-context.interface'
 
 @Controller('auth')
@@ -53,6 +55,7 @@ export class AuthController {
   }
 
   @ApiBearerAuth('JWT-auth')
+  @AuthenticatedOnly()
   @Post('context')
   @HttpCode(200)
   @ApiOperation({ summary: 'Switch active tenant/facility context and issue a new access token' })
@@ -60,6 +63,16 @@ export class AuthController {
   @ApiStandardError()
   async selectContext(@CurrentUser() user: AuthContext, @Body() dto: SelectContextRequestDto): Promise<SelectContextResponseDto> {
     return this.authService.selectContext(user.userId, dto)
+  }
+
+  @Public()
+  @Post('accept-invitation')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Accept an invitation and set the user password' })
+  @ApiStandardResponse(null, 200)
+  @ApiStandardError()
+  async acceptInvitation(@Body() dto: AcceptInvitationRequestDto): Promise<void> {
+    return this.authService.acceptInvitation(dto.token, dto.password)
   }
 
   @Public()

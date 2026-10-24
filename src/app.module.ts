@@ -20,6 +20,7 @@ import { RabbitMQModule } from './rabbitmq/rabbitmq.module'
 import { LoggerModule } from './common/logging/logger.module'
 import { HealthModule } from './health/health.module'
 import { IamModule } from './iam/iam.module'
+import { RlsModule } from './common/rls/rls.module'
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { IamModule } from './iam/iam.module'
       isGlobal: true
     }),
     TypeOrmModule.forRootAsync({ useClass: TypeOrmConfigService }),
+    RlsModule,
     LoggerModule,
     HealthModule,
     IamModule,
