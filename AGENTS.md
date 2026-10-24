@@ -101,9 +101,12 @@ Notas:
 
 ## Reglas de seguridad y operación
 
+- **Control total de Git/GitHub:** puedes crear ramas, commitear, hacer pull, merge, push y abrir pull requests **por iniciativa propia cuando sea necesario** para completar la tarea, sin pedir autorización en cada paso. Sigue el flujo y las convenciones de `git-workflow`.
 - Trabaja siempre en una rama `feat/...` o `fix/...`; si estás en `main`, crea una rama antes de editar. **Nunca commit ni push directo a `main`.**
-- Commits pequeños y atómicos, mensajes en español con formato `tipo(módulo): descripción` (ej. `feat(patient): migrar a TypeORM`), sin firmas ni "Co-authored-by". Solo cuando el usuario lo pida.
-- `git pull --ff-only` antes de empezar una tarea si hay remoto. `git push` solo cuando el usuario lo pida, a la rama de trabajo (nunca `--force`).
+- Commits pequeños y atómicos, mensajes en español con formato `tipo(módulo): descripción` (ej. `feat(patient): migrar a TypeORM`), sin firmas ni "Co-authored-by".
+- `git pull --ff-only` antes de empezar una tarea si hay remoto. `git push` a la rama de trabajo; **nunca `--force` ni `--force-with-lease`**.
+- Antes de commitear: revisa `git status`, `git diff` y `git log --oneline -10`; stagea solo lo intencional. No commitees secretos, `.env`, artefactos de build ni cambios ajenos.
+- Para operaciones destructivas (`reset --hard`, `clean -fd`, reescribir historia, borrar ramas con trabajo sin mergear) o si hay conflictos/ambigüedad, **detente y pregunta**.
 - No secretos en código ni en logs; no leer ni modificar `.env`.
 - **No crear `*.spec.ts`.** (El DoD del roadmap menciona pruebas; en este repo se omiten por decisión explícita del equipo.)
 - No añadir dependencias sin avisar.
@@ -118,7 +121,7 @@ Notas:
 ## Agentes y skills
 
 - Agentes: `@implementer` (edita), `@reviewer` (solo lectura, audita el diff).
-- Skills (`.opencode/skills/`): `nest-module`, `mongo-to-postgres`, `his-security`. Cárgalas cuando apliquen.
+- Skills (`.opencode/skills/`): `nest-module`, `mongo-to-postgres`, `his-security`, `git-workflow`. Cárgalas cuando apliquen.
 
 ## Referencia
 
