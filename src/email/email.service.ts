@@ -4,7 +4,7 @@ import { ConfigService } from '@nestjs/config'
 import { PatientService } from 'src/patient/patient.service'
 import { UserService } from 'src/user/user.service'
 import { RabbitMQService } from 'src/rabbitmq/rabbitmq.service'
-import { ForgotPasswordEmailData, WelcomeEmailData } from 'src/email/interfaces/email.interface'
+import { ForgotPasswordEmailData, InvitationEmailData, WelcomeEmailData } from 'src/email/interfaces/email.interface'
 
 @Injectable()
 export class EmailService {
@@ -47,9 +47,25 @@ export class EmailService {
     }
   }
 
-  async sendEmailWelcome(userId: string): Promise<any> {
+  async sendInvitationEmail(email: string, inviteLink: string): Promise<{ message: string; emailSentTo: string }> {
+    const emailData: InvitationEmailData = {
+      type: 'invitation',
+      to: email,
+      subject: 'Invitación al Hospital Yellow',
+      inviteLink
+    }
+
+    await this.rabbitMQService.publish(RabbitMQService.QUEUES.INVITATION, emailData)
+
+    return {
+      message: 'Invitation email queued successfully',
+      emailSentTo: email
+    }
+  }
+
+  async sendEmailWelcome(userId: string, tenantId?: string): Promise<any> {
     try {
-      const user = await this.userService.findById(userId)
+      const user = await this.userService.findById(userId, tenantId)
 
       if (!user || !user.email) {
         throw new Error('User not found or email missing')
@@ -60,7 +76,7 @@ export class EmailService {
 
       switch (tipo) {
         case 'patient':
-          const patient = await this.patientService.findByUserId(userId)
+          const patient = await this.patientService.findByUserId(userId, tenantId)
           name = patient?.firstname || 'Paciente'
           break
         // case 'doctor':

@@ -1,82 +1,91 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put, NotFoundException } from '@nestjs/common'
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, NotFoundException } from '@nestjs/common'
 import { UserService } from './user.service'
 import { CreateUserDto } from './dto/request/create-user-request.dto'
-import { User } from './model/user.schema'
-import { Public } from '../decorators/request/public.decorator'
-import { ApiBearerAuth, ApiBody, ApiNoContentResponse, ApiOperation } from '@nestjs/swagger'
-import { changePasswordResponseDto } from './dto/response/changePassword-user-response.dto'
+import { ChangePasswordRequestDto } from './dto/request/change-password-user-request.dto'
+import { ApiBearerAuth, ApiBody, ApiOperation, ApiQuery } from '@nestjs/swagger'
+import { RequirePermission } from '../decorators/request/require-permission.decorator'
+import { CurrentUser } from '../decorators/request/current-user.decorator'
+import { AuthContext } from 'src/iam/interfaces/auth-context.interface'
 import { ApiStandardResponse } from 'src/decorators/swagger/response.decorator'
 import { ApiStandardError } from 'src/decorators/swagger/error.decorator'
 import { UserDetailsResponseDto } from './dto/response/user-details-response.dto'
 import { UserResumenResponseDto } from './dto/response/user-resumen-response.dto'
 
-@Controller('user')
+@Controller('users')
 export class UserController {
   constructor(private readonly userService: UserService) {}
 
-  @Public()
+  @ApiBearerAuth('JWT-auth')
   @Post()
   @HttpCode(201)
+  @RequirePermission('user:write')
   @ApiOperation({ summary: 'Create a new user' })
   @ApiStandardResponse(UserDetailsResponseDto, 201)
   @ApiStandardError()
   @ApiBody({ description: 'User data', type: CreateUserDto })
-  async createUser(@Body() createUserDto: CreateUserDto): Promise<UserDetailsResponseDto> {
-    return this.userService.create(createUserDto)
+  async createUser(@CurrentUser() ctx: AuthContext, @Body() createUserDto: CreateUserDto): Promise<UserDetailsResponseDto> {
+    return this.userService.createForTenant(createUserDto, ctx.tenantId)
   }
 
   @ApiBearerAuth('JWT-auth')
   @Get(':id')
+  @RequirePermission('user:read')
   @HttpCode(200)
   @ApiOperation({ summary: 'Get user by ID' })
   @ApiStandardResponse(UserDetailsResponseDto, 200)
   @ApiStandardError()
-  async findUserById(@Param('id') id: string): Promise<UserDetailsResponseDto> {
-    return this.userService.findById(id)
-  }
-
-  @ApiBearerAuth('JWT-auth')
-  @Get('email/:email')
-  @HttpCode(200)
-  @ApiOperation({ summary: 'Get user by email' })
-  @ApiStandardResponse(UserDetailsResponseDto, 200)
-  @ApiStandardError()
-  async findUserByEmail(@Param('email') email: string): Promise<UserDetailsResponseDto> {
-    const user = await this.userService.findByEmailDto(email)
-    if (!user) {
-      throw new NotFoundException(`Usuario con email ${email} no encontrado`)
-    }
+  async findUserById(@CurrentUser() ctx: AuthContext, @Param('id') id: string): Promise<UserDetailsResponseDto> {
+    const user = await this.userService.findByIdForTenant(id, ctx.tenantId)
+    if (!user) throw new NotFoundException('User not found')
     return user
   }
 
   @ApiBearerAuth('JWT-auth')
   @Get()
+  @RequirePermission('user:read')
   @HttpCode(200)
-  @ApiOperation({ summary: 'Get all users' })
+  @ApiOperation({ summary: 'Get all users or filter by email' })
+  @ApiQuery({ name: 'email', required: false, description: 'Filter by user email' })
   @ApiStandardResponse(UserResumenResponseDto, 200)
   @ApiStandardError()
-  async findAll(): Promise<UserResumenResponseDto[]> {
-    return this.userService.findAll()
+  async findAll(@CurrentUser() ctx: AuthContext, @Query('email') email?: string): Promise<UserResumenResponseDto[] | UserDetailsResponseDto> {
+    if (email) {
+      const user = await this.userService.findByEmailForTenant(email, ctx.tenantId)
+      if (!user) {
+        throw new NotFoundException(`Usuario con email ${email} no encontrado`)
+      }
+      return user
+    }
+    return this.userService.findAllForTenant(ctx.tenantId)
   }
 
   @ApiBearerAuth('JWT-auth')
-  @Put(':id/password')
+  @Patch(':id/password')
+  @RequirePermission('user:write')
   @HttpCode(200)
   @ApiOperation({ summary: 'Update user password' })
   @ApiStandardResponse(UserResumenResponseDto, 200)
   @ApiStandardError()
-  @ApiBody({ description: 'New password', type: changePasswordResponseDto })
-  async updatePassword(@Param('id') id: string, @Body('password') password: string): Promise<UserResumenResponseDto> {
-    return this.userService.updatePassword(id, password)
+  @ApiBody({ description: 'New password', type: ChangePasswordRequestDto })
+  async updatePassword(
+    @CurrentUser() ctx: AuthContext,
+    @Param('id') id: string,
+    @Body() { password }: ChangePasswordRequestDto
+  ): Promise<UserResumenResponseDto> {
+    const user = await this.userService.updatePasswordForTenant(id, ctx.tenantId, password)
+    if (!user) throw new NotFoundException('User not found')
+    return user
   }
 
   @ApiBearerAuth('JWT-auth')
   @Delete(':id')
+  @RequirePermission('user:write')
   @HttpCode(204)
   @ApiOperation({ summary: 'Delete user by ID' })
   @ApiStandardResponse(null, 204)
   @ApiStandardError()
-  async deleteById(@Param('id') id: string): Promise<void> {
-    return this.userService.delete(id)
+  async deleteById(@CurrentUser() ctx: AuthContext, @Param('id') id: string): Promise<void> {
+    const deleted = await this.userService.deleteForTenant(id, ctx.tenantId)
+    if (!deleted) throw new NotFoundException('User not found')
   }
 }

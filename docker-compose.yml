@@ -1,0 +1,103 @@
+services:
+  api:
+    build:
+      context: .
+      target: development
+    container_name: hospital-b-api
+    restart: unless-stopped
+    init: true
+    command: npm run start:dev
+    ports:
+      - '4000:4000'
+    env_file:
+      - .env
+    environment:
+      MONGO_URI: mongodb://mongo:27017/hospital
+      RABBITMQ_URL: amqp://rabbitmq:5672
+      PORT: 4000
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-hospital}
+      DB_PASSWORD: ${DB_PASSWORD:-hospital}
+      DB_NAME: ${DB_NAME:-hospital}
+      DB_SSL: 'false'
+    volumes:
+      - .:/usr/src/app
+      - /usr/src/app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://localhost:4000/api/v1/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    networks:
+      - hospital
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: hospital-b-postgres
+    restart: unless-stopped
+    ports:
+      - '5432:5432'
+    environment:
+      POSTGRES_USER: ${DB_USER:-hospital}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-hospital}
+      POSTGRES_DB: ${DB_NAME:-hospital}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${DB_USER:-hospital} -d ${DB_NAME:-hospital}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - hospital
+
+  mongo:
+    image: mongo:7
+    container_name: hospital-b-mongo
+    restart: unless-stopped
+    ports:
+      - '27017:27017'
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ['CMD', 'mongosh', '--eval', "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - hospital
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: hospital-b-rabbitmq
+    restart: unless-stopped
+    ports:
+      - '5672:5672'
+      - '15672:15672'
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - hospital
+
+volumes:
+  postgres_data:
+  mongo_data:
+  rabbitmq_data:
+
+networks:
+  hospital:
+    driver: bridge

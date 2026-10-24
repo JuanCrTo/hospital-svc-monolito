@@ -4,6 +4,7 @@ import { JwtService } from '@nestjs/jwt'
 import { Request } from 'express'
 import { IJwtPayload } from './interfaces/jwt-payload.interface'
 import { IS_PUBLIC_KEY } from '../decorators/request/public.decorator'
+import { getLogContext } from '../common/logging/log-context.storage'
 
 @Injectable()
 export class AuthGuard implements CanActivate {
@@ -29,10 +30,22 @@ export class AuthGuard implements CanActivate {
     try {
       const payload = await this.jwtService.verifyAsync<IJwtPayload>(token)
 
+      if (payload.tokenType && payload.tokenType !== 'access') {
+        throw new UnauthorizedException()
+      }
+
       delete payload.iat
       delete payload.exp
 
       request['user'] = payload
+
+      const logContext = getLogContext()
+      if (logContext) {
+        logContext.actorUserId = payload.userId
+        logContext.tenantId = payload.tenantId ?? null
+        logContext.facilityId = payload.facilityId ?? null
+        logContext.isPlatformAdmin = payload.isPlatformAdmin === true
+      }
     } catch {
       throw new UnauthorizedException()
     }

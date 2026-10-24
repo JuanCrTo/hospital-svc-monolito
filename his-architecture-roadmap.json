@@ -1,0 +1,250 @@
+{
+  "document": {
+    "title": "Roadmap de Arquitectura — Sistema Integral de Gestión Hospitalaria",
+    "language": "es-CO",
+    "version": "1.0",
+    "audience": "Desarrollador junior"
+  },
+  "executiveSummary": {
+    "recommendation": "Iniciar con un monolito modular en NestJS y extraer microservicios solo cuando exista una necesidad operativa medible.",
+    "primaryDatabase": "PostgreSQL",
+    "whyPostgreSQL": [
+      "El dominio hospitalario contiene transacciones, relaciones, restricciones e integridad referencial.",
+      "Citas, camas, inventario, facturación y auditoría se benefician de transacciones ACID.",
+      "MongoDB puede usarse posteriormente para necesidades no estructuradas, pero no como núcleo clínico y financiero."
+    ],
+    "targetArchitecture": {
+      "api": "NestJS modular",
+      "primaryStorage": "PostgreSQL con migraciones y Row-Level Security",
+      "cacheAndQueues": "Redis",
+      "fileStorage": "S3 o MinIO para PDFs, imágenes y adjuntos",
+      "asynchronousProcessing": "Workers de colas para correos, PDFs, integraciones y tareas pesadas",
+      "initialModules": [
+        "Auth e IAM/RBAC",
+        "Organización y sedes",
+        "Pacientes",
+        "Agenda y citas",
+        "Historia clínica",
+        "Órdenes, laboratorio e imágenes",
+        "Farmacia e inventario",
+        "Facturación y pagos",
+        "Auditoría y notificaciones",
+        "Reportes"
+      ]
+    }
+  },
+  "mandatoryFoundationsBeforeSprint1": [
+    {
+      "name": "Multi-tenancy y multi-sede",
+      "concepts": {
+        "tenant": "Organización dueña de los datos; por ejemplo, una red hospitalaria.",
+        "facility": "Sede, clínica u hospital perteneciente a un tenant.",
+        "department": "Unidad operativa como urgencias, laboratorio, consulta externa o UCI."
+      },
+      "strategy": [
+        "Base PostgreSQL compartida con tenant_id obligatorio en cada entidad de negocio.",
+        "facility_id obligatorio cuando el dato pertenece a una sede.",
+        "tenant_id y facility_id se derivan del contexto autenticado; no se aceptan como autoridad desde el body.",
+        "Cada consulta filtra por tenant_id y la base aplica Row-Level Security como defensa adicional."
+      ],
+      "dataModel": [
+        "users -> memberships -> tenants",
+        "memberships -> facility_assignments -> facilities",
+        "pacientes, citas, facturas e historias -> tenant_id",
+        "citas, camas, inventario y atenciones -> tenant_id + facility_id"
+      ],
+      "reason": "Evita que un error en una consulta exponga datos de otra organización o sede."
+    },
+    {
+      "name": "Autenticación, autorización y RBAC",
+      "recommendedModel": [
+        "User",
+        "Role",
+        "Permission",
+        "Membership(user_id, tenant_id, status)",
+        "MembershipRole(membership_id, role_id)",
+        "FacilityAssignment(membership_id, facility_id)"
+      ],
+      "securityRules": [
+        "Usar access token JWT de vida corta y refresh token rotado y revocable.",
+        "El token identifica usuario, tenant activo, sede activa y versión de permisos.",
+        "Autorizar cada operación por autenticación, pertenencia al tenant, permiso, acceso a sede y acceso al objeto.",
+        "Denegar por defecto y conceder permisos explícitos.",
+        "Verificar autorización de objeto en todo endpoint que recibe un ID."
+      ],
+      "reason": "Un simple campo role en User no resuelve permisos distintos de una misma persona en varias sedes."
+    },
+    {
+      "name": "Integridad de datos clínicos",
+      "rules": [
+        "Usar Encounter o Atención como contexto clínico.",
+        "Guardar notas, evoluciones, diagnósticos, órdenes y prescripciones como registros separados.",
+        "Una corrección es una enmienda con motivo, autor y fecha; nunca una sobrescritura silenciosa.",
+        "No hacer hard delete sobre información clínica.",
+        "Registrar autor, sede, fecha UTC, origen y versión.",
+        "Usar UUID o ULID como IDs públicos."
+      ]
+    },
+    {
+      "name": "Auditoría, logs y observabilidad",
+      "auditLogFields": [
+        "actor_user_id",
+        "tenant_id",
+        "facility_id",
+        "action",
+        "resource_type",
+        "resource_id",
+        "timestamp",
+        "ip",
+        "request_id",
+        "before_summary",
+        "after_summary"
+      ],
+      "rules": [
+        "AuditLog es solo de inserción.",
+        "Auditar lecturas de información clínica sensible, cambios, exportaciones e impresiones.",
+        "No almacenar contraseñas, tokens ni historia clínica completa en logs técnicos.",
+        "Usar logs JSON estructurados y request_id por petición.",
+        "Implementar health checks live y ready.",
+        "Validar backups mediante restauraciones periódicas."
+      ]
+    },
+    {
+      "name": "Contrato técnico",
+      "rules": [
+        "Usar migraciones con Prisma o TypeORM; nunca cambios manuales en producción.",
+        "Separar DTOs de creación, actualización y respuesta.",
+        "Activar validación global, whitelist de propiedades y transformación controlada.",
+        "No devolver modelos de base de datos directamente.",
+        "Probar autorización, aislamiento de tenant y transacciones.",
+        "Generar Swagger desde DTOs y mantener pruebas independientes.",
+        "No usar repository.update(id, req.body); aceptar solo propiedades explícitamente permitidas."
+      ]
+    }
+  ],
+  "sprints": [
+    {
+      "number": 0,
+      "name": "Base segura y desplegable",
+      "objective": "Crear la plataforma técnica para construir módulos sin comprometer seguridad, aislamiento ni despliegues.",
+      "entities": ["Tenant", "Facility", "User", "AuditLog"],
+      "modulesAndEndpoints": ["Configuración", "Base de datos", "Migraciones", "Health checks", "Logging", "CI/CD"],
+      "commonTraps": ["Crear controladores antes de definir migraciones, aislamiento de datos y estándares de respuesta."]
+    },
+    {
+      "number": 1,
+      "name": "Autenticación e IAM",
+      "objective": "Autenticar usuarios y aplicar permisos consistentes en toda la API.",
+      "entities": ["User", "Membership", "Role", "Permission", "RefreshToken"],
+      "modulesAndEndpoints": ["POST /auth/login", "POST /auth/refresh", "POST /auth/logout", "POST /auth/forgot-password", "Guards y políticas"],
+      "commonTraps": ["Resolver los permisos con un enum global de roles y omitir el contexto de tenant o sede."]
+    },
+    {
+      "number": 2,
+      "name": "Organización y operación multi-sede",
+      "objective": "Administrar organizaciones, sedes, departamentos y asignaciones de personal.",
+      "entities": ["Tenant", "Facility", "Department", "Membership", "FacilityAssignment"],
+      "modulesAndEndpoints": ["CRUD administrativo de tenants", "CRUD de sedes", "CRUD de departamentos", "Asignaciones de usuario a sede"],
+      "commonTraps": ["Confiar en tenantId o facilityId enviados por el cliente en vez de derivarlos de la sesión y autorización."]
+    },
+    {
+      "number": 3,
+      "name": "Registro maestro de pacientes",
+      "objective": "Crear un registro único, seguro y consultable de pacientes.",
+      "entities": ["Patient", "PatientIdentifier", "Contact", "InsuranceCoverage", "EmergencyContact"],
+      "modulesAndEndpoints": ["POST /patients", "GET /patients", "GET /patients/:id", "PATCH /patients/:id", "Búsqueda por identificador"],
+      "commonTraps": ["Permitir duplicados de pacientes y no definir identificadores únicos por tenant."]
+    },
+    {
+      "number": 4,
+      "name": "Agenda y citas",
+      "objective": "Reservar y gestionar citas sin conflictos de horario.",
+      "entities": ["ProviderSchedule", "Appointment", "AppointmentStatus", "Service"],
+      "modulesAndEndpoints": ["Disponibilidad", "POST /appointments", "PATCH /appointments/:id/cancel", "PATCH /appointments/:id/reschedule", "Check-in"],
+      "commonTraps": ["Permitir doble reserva por no usar transacciones, restricciones o bloqueos adecuados."]
+    },
+    {
+      "number": 5,
+      "name": "Atención clínica mínima",
+      "objective": "Registrar una atención con información clínica básica y trazable.",
+      "entities": ["Encounter", "ClinicalNote", "VitalSign", "Diagnosis"],
+      "modulesAndEndpoints": ["Abrir y cerrar atención", "Evoluciones", "Signos vitales", "Diagnósticos"],
+      "commonTraps": ["Guardar toda la historia clínica en un JSON editable o permitir borrar evoluciones."]
+    },
+    {
+      "number": 6,
+      "name": "Órdenes y resultados",
+      "objective": "Gestionar órdenes clínicas y resultados de laboratorio o imágenes.",
+      "entities": ["ClinicalOrder", "LabResult", "ImagingStudy", "Attachment"],
+      "modulesAndEndpoints": ["Crear órdenes", "Validar órdenes", "Cargar resultados", "Consultar resultados autorizados"],
+      "commonTraps": ["Guardar archivos binarios en PostgreSQL o servir adjuntos sin validar acceso al paciente y al objeto."]
+    },
+    {
+      "number": 7,
+      "name": "Prescripción, farmacia e inventario básico",
+      "objective": "Prescribir, dispensar y mantener trazabilidad de existencias.",
+      "entities": ["Medication", "Prescription", "Dispensation", "InventoryItem", "StockMovement"],
+      "modulesAndEndpoints": ["Prescripciones", "Dispensación", "Consulta de stock", "Kardex de movimientos"],
+      "commonTraps": ["Editar directamente una cantidad de stock en lugar de registrar movimientos inmutables."]
+    },
+    {
+      "number": 8,
+      "name": "Hospitalización y enfermería",
+      "objective": "Administrar admisiones, camas, traslados y tareas de enfermería.",
+      "entities": ["Bed", "Admission", "BedAssignment", "NursingNote", "CareTask"],
+      "modulesAndEndpoints": ["Admisión", "Traslado", "Alta", "Ocupación de cama", "Notas y tareas de enfermería"],
+      "commonTraps": ["No modelar estados de cama ni prevenir dos asignaciones activas para la misma cama."]
+    },
+    {
+      "number": 9,
+      "name": "Facturación y pagos",
+      "objective": "Convertir servicios en cargos, facturas y pagos trazables.",
+      "entities": ["Charge", "Invoice", "InvoiceLine", "Payment", "Payer"],
+      "modulesAndEndpoints": ["Generar cargos", "Emitir factura", "Registrar pago", "Notas crédito y reversos"],
+      "commonTraps": ["Modificar silenciosamente facturas emitidas en lugar de usar notas crédito o reversos."]
+    },
+    {
+      "number": 10,
+      "name": "Portal de paciente y PQRS",
+      "objective": "Ofrecer autoservicio limitado y seguro para pacientes.",
+      "entities": ["PatientAccount", "PqrsCase", "PqrsMessage", "Consent"],
+      "modulesAndEndpoints": ["Perfil propio", "Citas propias", "Resultados autorizados", "Creación y seguimiento de PQRS"],
+      "commonTraps": ["Reutilizar APIs internas y filtrar únicamente por patientId enviado por el cliente."]
+    },
+    {
+      "number": 11,
+      "name": "Reportes, auditoría y endurecimiento",
+      "objective": "Operar, observar y escalar el sistema de forma segura.",
+      "entities": ["AuditLog", "ExportJob", "ReadModels o agregados de lectura"],
+      "modulesAndEndpoints": ["Dashboards", "Exportaciones asíncronas", "Consulta de auditoría", "Métricas y alertas"],
+      "commonTraps": ["Ejecutar reportes pesados directamente sobre las tablas transaccionales en horas operativas."]
+    }
+  ],
+  "mvpOrder": {
+    "firstRelease": ["IAM", "Sedes", "Pacientes", "Agenda", "Atención clínica básica"],
+    "nextReleases": ["Órdenes y resultados", "Prescripciones", "Hospitalización", "Facturación", "Portal de paciente", "Analítica avanzada"],
+    "reason": "Los módulos administrativos y financieros dependen de datos clínicos y operativos correctos; construirlos primero produce interfaces sobre información inconsistente."
+  },
+  "definitionOfDonePerSprint": [
+    "Migraciones reproducibles.",
+    "Swagger actualizado.",
+    "Pruebas unitarias y de integración.",
+    "Pruebas negativas para otro tenant, otra sede, otro paciente y permisos insuficientes.",
+    "Auditoría para acciones sensibles.",
+    "Manejo de errores consistente.",
+    "Pull request pequeño y revisable."
+  ],
+  "securityReferences": [
+    {
+      "title": "OWASP API1:2023 — Broken Object Level Authorization",
+      "url": "https://api-security.owasp.org/editions/2023/en/0xa1-broken-object-level-authorization/",
+      "relevance": "Todo endpoint que recibe un ID debe comprobar que el usuario autorizado puede operar ese objeto específico."
+    },
+    {
+      "title": "OWASP API3:2023 — Broken Object Property Level Authorization",
+      "url": "https://api-security.owasp.org/editions/2023/en/0xa3-broken-object-property-level-authorization/",
+      "relevance": "Los DTOs deben limitar explícitamente las propiedades legibles y modificables."
+    }
+  ],
+  "complianceNote": "Antes de producción, validar con asesoría jurídica y de cumplimiento los requisitos del país de operación: protección de datos de salud, retención documental, consentimiento, firma clínica, auditoría y residencia de datos."
+}
