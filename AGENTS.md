@@ -102,7 +102,8 @@ Notas:
 ## Reglas de seguridad y operación
 
 - **Control total de Git/GitHub:** puedes crear ramas, commitear, hacer pull, merge, push y abrir pull requests **por iniciativa propia cuando sea necesario** para completar la tarea, sin pedir autorización en cada paso. Sigue el flujo y las convenciones de `git-workflow`.
-- Trabaja siempre en una rama `feat/...` o `fix/...`; si estás en `main`, crea una rama antes de editar. **Nunca commit ni push directo a `main`.**
+- **Ramas permanentes (nunca borrar):** `main` para deploy de producción y `dev` para pruebas/integración. No trabajes directo en ellas; crea una rama desde `dev` (o la base acordada) antes de editar. **Nunca commit ni push directo a `main` ni a `dev`.** El paso a producción es `dev` → `main` mediante PR/release.
+- **Nombres de ramas de trabajo:** prefijo `feature/`, `fix/`, `hotfix/`, `refactor/`, `test/` o `chore/`, en minúsculas, sin espacios ni guiones bajos; usa kebab-case. Ejemplos: `feature/patient-typeorm`, `fix/auth-refresh-tenant`, `hotfix/rls-policy`, `refactor/appointment-service`, `test/clinical-e2e`, `chore/deps-typeorm`.
 - Commits pequeños y atómicos, mensajes en español con formato `tipo(módulo): descripción` (ej. `feat(patient): migrar a TypeORM`), sin firmas ni "Co-authored-by".
 - `git pull --ff-only` antes de empezar una tarea si hay remoto. `git push` a la rama de trabajo; **nunca `--force` ni `--force-with-lease`**.
 - Antes de commitear: revisa `git status`, `git diff` y `git log --oneline -10`; stagea solo lo intencional. No commitees secretos, `.env`, artefactos de build ni cambios ajenos.
