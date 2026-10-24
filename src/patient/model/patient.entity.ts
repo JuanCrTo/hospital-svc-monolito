@@ -2,6 +2,9 @@ import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, OneToMa
 import { Tenant } from '../../tenant/model/tenant.entity'
 import { UserEntity } from '../../user/model/user.entity'
 import { PatientLocationHistory } from './patient-location-history.entity'
+import { PatientIdentifier } from './patient-identifier.entity'
+import { PatientContact } from './patient-contact.entity'
+import { InsuranceCoverage } from './insurance-coverage.entity'
 
 const decimalTransformer = {
   to: (value: number | null | undefined): number | null | undefined => value,
@@ -77,4 +80,13 @@ export class PatientEntity {
 
   @OneToMany(() => PatientLocationHistory, history => history.patient)
   locationHistory: PatientLocationHistory[]
+
+  @OneToMany(() => PatientIdentifier, identifier => identifier.patient)
+  identifiers: PatientIdentifier[]
+
+  @OneToMany(() => PatientContact, contact => contact.patient)
+  contacts: PatientContact[]
+
+  @OneToMany(() => InsuranceCoverage, coverage => coverage.patient)
+  insuranceCoverages: InsuranceCoverage[]
 }

@@ -73,14 +73,14 @@ export const getCoordinatesFromLocation = async (location: string): Promise<{ la
 export function addLocationToHistory(
   currentHistory: {
     location: string;
-    latitude: number;
-    longitude: number;
+    latitude: number | null;
+    longitude: number | null;
     updatedAt: Date;
   }[],
   newEntry: {
     location: string;
-    latitude: number;
-    longitude: number;
+    latitude: number | null;
+    longitude: number | null;
   }
 ): typeof currentHistory {
   const lastEntry = currentHistory?.[currentHistory.length - 1];

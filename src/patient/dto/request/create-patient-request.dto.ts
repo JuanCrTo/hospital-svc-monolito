@@ -1,5 +1,10 @@
+import { ApiPropertyOptional } from '@nestjs/swagger'
 import { ApiProperty } from '@nestjs/swagger'
-import { IsDateString, IsNotEmpty, IsString, MaxLength } from 'class-validator'
+import { Type } from 'class-transformer'
+import { ArrayMaxSize, IsArray, IsDateString, IsNotEmpty, IsOptional, IsString, MaxLength, ValidateNested } from 'class-validator'
+import { PatientIdentifierRequestDto } from './patient-identifier-request.dto'
+import { PatientContactRequestDto } from './patient-contact-request.dto'
+import { InsuranceCoverageRequestDto } from './insurance-coverage-request.dto'
 import { IsPastInDate } from 'src/decorators/validation/isPastInDate.decorator'
 
 export class CreatePatientRequestDto {
@@ -67,4 +72,28 @@ export class CreatePatientRequestDto {
   @IsString({ message: 'Location must be a string' })
   @MaxLength(500)
   location: string
+
+  @ApiPropertyOptional({ type: [PatientIdentifierRequestDto] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @ValidateNested({ each: true })
+  @Type(() => PatientIdentifierRequestDto)
+  identifiers?: PatientIdentifierRequestDto[]
+
+  @ApiPropertyOptional({ type: [PatientContactRequestDto] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @ValidateNested({ each: true })
+  @Type(() => PatientContactRequestDto)
+  contacts?: PatientContactRequestDto[]
+
+  @ApiPropertyOptional({ type: [InsuranceCoverageRequestDto] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @ValidateNested({ each: true })
+  @Type(() => InsuranceCoverageRequestDto)
+  insuranceCoverages?: InsuranceCoverageRequestDto[]
 }

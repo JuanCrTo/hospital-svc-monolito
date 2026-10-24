@@ -14,9 +14,72 @@ export class LocationHistoryItemDto {
   updatedAt?: Date
 }
 
+export class PatientIdentifierResponseDto {
+  @ApiProperty({ format: 'uuid' })
+  id: string
+
+  @ApiProperty({ example: 'passport' })
+  type: string
+
+  @ApiProperty({ example: 'AB1234567' })
+  value: string
+
+  @ApiProperty({ example: '2026-10-24T15:00:00.000Z' })
+  createdAt: Date
+}
+
+export class PatientContactResponseDto {
+  @ApiProperty({ format: 'uuid' })
+  id: string
+
+  @ApiProperty({ example: 'phone' })
+  type: string
+
+  @ApiProperty({ example: '+573001112233' })
+  value: string
+
+  @ApiProperty({ example: false })
+  isPrimary: boolean
+
+  @ApiProperty({ example: '2026-10-24T15:00:00.000Z' })
+  createdAt: Date
+}
+
+export class InsuranceCoverageResponseDto {
+  @ApiProperty({ format: 'uuid' })
+  id: string
+
+  @ApiProperty({ example: 'Seguros Salud Colombia' })
+  providerName: string
+
+  @ApiProperty({ example: 'POL-2026-0001' })
+  policyNumber: string
+
+  @ApiProperty({ example: 'Plan Familiar', required: false, nullable: true })
+  planName?: string
+
+  @ApiProperty({ example: '2026-01-01' })
+  validFrom: string
+
+  @ApiProperty({ example: '2026-12-31', required: false, nullable: true })
+  validTo?: string
+
+  @ApiProperty({ example: true })
+  isActive: boolean
+
+  @ApiProperty({ example: '2026-10-24T15:00:00.000Z' })
+  createdAt: Date
+
+  @ApiProperty({ example: '2026-10-24T15:00:00.000Z' })
+  updatedAt: Date
+}
+
 export class PatientResponseDto {
   @ApiProperty({ format: 'uuid' })
   id: string
+
+  @ApiProperty({ format: 'uuid' })
+  userId: string
 
   @ApiProperty({ example: '1234567890' })
   identification: string
@@ -57,4 +120,13 @@ export class PatientResponseDto {
     nullable: true
   })
   locationHistory?: LocationHistoryItemDto[]
+
+  @ApiProperty({ type: [PatientIdentifierResponseDto], required: false })
+  identifiers?: PatientIdentifierResponseDto[]
+
+  @ApiProperty({ type: [PatientContactResponseDto], required: false })
+  contacts?: PatientContactResponseDto[]
+
+  @ApiProperty({ type: [InsuranceCoverageResponseDto], required: false })
+  insuranceCoverages?: InsuranceCoverageResponseDto[]
 }
