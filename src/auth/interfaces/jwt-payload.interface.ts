@@ -1,6 +1,9 @@
 export interface IJwtPayload {
-    userId: string
-    iat?: number
-    exp?: number
-  }
-  
+  userId: string
+  tenantId?: string | null
+  facilityId?: string | null
+  permissionsVersion?: number | null
+  tokenType?: 'access' | 'password_reset'
+  iat?: number
+  exp?: number
+}

@@ -19,6 +19,7 @@ import { PdfModule } from './pdf/pdf.module'
 import { RabbitMQModule } from './rabbitmq/rabbitmq.module'
 import { LoggerModule } from './common/logging/logger.module'
 import { HealthModule } from './health/health.module'
+import { IamModule } from './iam/iam.module'
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { HealthModule } from './health/health.module'
     TypeOrmModule.forRootAsync({ useClass: TypeOrmConfigService }),
     LoggerModule,
     HealthModule,
+    IamModule,
     MongooseModule.forRootAsync({ useClass: MongooseConfigService }),
     DoctorModule,
     UserModule,

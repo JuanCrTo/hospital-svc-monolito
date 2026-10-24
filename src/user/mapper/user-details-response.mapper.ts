@@ -3,9 +3,9 @@ import { PatientResponseDto } from 'src/patient/dto/response/patient-response.dt
 import { mapPatientToDto } from 'src/patient/mapper/patient-response.mapper'
 import { UserRole } from '../enums/user-role.enum'
 import { Patient } from 'src/patient/model/patient.schema'
-import { User } from '../model/user.schema'
+import { UserEntity } from '../model/user.entity'
 
-export function mapUserDetailsToDto(user: Partial<User> & { patientDetails?: Partial<Patient> }): UserDetailsResponseDto {
+export function mapUserDetailsToDto(user: Partial<UserEntity> & { patientDetails?: Partial<Patient> }): UserDetailsResponseDto {
   if (!user) return undefined
 
   let patientDetails: PatientResponseDto | undefined = undefined

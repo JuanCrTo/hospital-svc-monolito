@@ -1,8 +1,8 @@
-import { Injectable } from '@nestjs/common'
-import { InjectModel } from '@nestjs/mongoose'
-import { Model } from 'mongoose'
+import { ConflictException, Injectable } from '@nestjs/common'
+import { InjectRepository } from '@nestjs/typeorm'
+import { Repository } from 'typeorm'
 import { CreateUserDto } from './dto/request/create-user-request.dto'
-import { User } from './model/user.schema'
+import { UserEntity } from './model/user.entity'
 import { hashPassword } from 'src/utils/utils'
 import { PatientService } from 'src/patient/patient.service'
 import { USER_ROLES } from './enums/user-role.enum'
@@ -13,47 +13,61 @@ import { UserResumenResponseDto } from './dto/response/user-resumen-response.dto
 import { mapUserDetailsToDto } from './mapper/user-details-response.mapper'
 import { mapUserResumenToDto } from './mapper/user-resumen-response.mapper'
 import { mapPatientToDto } from 'src/patient/mapper/patient-response.mapper'
-import { IUser } from './interfaces/user.interface'
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 @Injectable()
 export class UserService {
   constructor(
-    @InjectModel(User.name) private readonly userModel: Model<User>,
+    @InjectRepository(UserEntity)
+    private readonly userRepository: Repository<UserEntity>,
     private readonly patientService: PatientService,
     private readonly emailService: EmailService
   ) {}
 
-  // create
   async create(createUserDto: CreateUserDto): Promise<UserDetailsResponseDto> {
-    const hashedPassword = await hashPassword(createUserDto.password)
-    createUserDto.password = hashedPassword
-
-    const user = await this.userModel.create(createUserDto)
+    const userId = await this.createRaw(createUserDto)
 
     let patientDetails = undefined
     if (createUserDto.role === 'patient' && createUserDto.patientDetails) {
       const createPatientDto: CreatePatientDto & { userId: string } = {
         ...createUserDto.patientDetails,
-        userId: user._id.toString()
+        userId
       }
       await this.patientService.create(createPatientDto)
-      const patient = await this.patientService.findByUserId(user._id.toString())
+      const patient = await this.patientService.findByUserId(userId)
       patientDetails = mapPatientToDto(patient)
     }
 
-    // Enviar correo de bienvenida
-    await this.emailService.sendEmailWelcome(user._id.toString())
+    await this.emailService.sendEmailWelcome(userId)
 
     return mapUserDetailsToDto({
-      email: user.email,
-      role: user.role,
+      email: createUserDto.email,
+      role: createUserDto.role,
       patientDetails
     })
   }
 
-  // findOneById
+  async createRaw(createUserDto: CreateUserDto): Promise<string> {
+    const existing = await this.userRepository.findOne({ where: { email: createUserDto.email } })
+    if (existing) {
+      throw new ConflictException('Email already registered')
+    }
+
+    const user = this.userRepository.create({
+      email: createUserDto.email,
+      passwordHash: await hashPassword(createUserDto.password),
+      role: createUserDto.role
+    })
+
+    const saved = await this.userRepository.save(user)
+    return saved.id
+  }
+
   async findById(id: string): Promise<UserDetailsResponseDto> {
-    const user = await this.userModel.findById(id).select('-_id -password').lean()
+    if (!UUID_PATTERN.test(id)) return null
+
+    const user = await this.userRepository.findOne({ where: { id } })
     if (!user) return null
 
     let patientDetails = undefined
@@ -71,19 +85,22 @@ export class UserService {
     })
   }
 
-  // Para lógica interna (auth, etc.)
-  async findByEmailRaw(email: string): Promise<IUser> {
-    return this.userModel.findOne({ email })
+  async findByIdRaw(id: string): Promise<UserEntity | null> {
+    if (!UUID_PATTERN.test(id)) return null
+    return this.userRepository.findOne({ where: { id } })
   }
 
-  // Para exponer en la API
+  async findByEmailRaw(email: string): Promise<UserEntity | null> {
+    return this.userRepository.findOne({ where: { email } })
+  }
+
   async findByEmailDto(email: string): Promise<UserDetailsResponseDto> {
-    const user = await this.userModel.findOne({ email }).select('-password').lean()
+    const user = await this.userRepository.findOne({ where: { email } })
     if (!user) return null
 
     let patientDetails = undefined
-    if (user.role === USER_ROLES[2]) { // patient
-      const patient = await this.patientService.findByUserId(user._id.toString())
+    if (user.role === USER_ROLES[2]) {
+      const patient = await this.patientService.findByUserId(user.id)
       if (patient) {
         patientDetails = mapPatientToDto(patient)
       }
@@ -96,37 +113,28 @@ export class UserService {
     })
   }
 
-  // findAll
   async findAll(): Promise<UserResumenResponseDto[]> {
-    const users = await this.userModel.find().select('-_id -password').lean()
+    const users = await this.userRepository.find()
     return users.map(mapUserResumenToDto)
   }
 
-  // delete
   async delete(id: string): Promise<void> {
-    const user = await this.userModel.findByIdAndDelete(id)
+    const user = await this.findByIdRaw(id)
+    if (!user) return
 
-    switch (user.role) {
-      // case USER_ROLES[0]: // *doctor
-      //   await this.doctorService.deleteByUserId(user._id);
-      //   break;
-      // case USER_ROLES[1]: // *nurse
-      //   await this.nurseService.deleteByUserId(user._id);
-      //   break;
-      case USER_ROLES[2]: // patient
-        await this.patientService.delete(user._id.toString())
-        break
+    if (user.role === USER_ROLES[2]) {
+      await this.patientService.delete(user.id)
     }
 
-    await this.userModel.findByIdAndDelete(id).select('-_id -password').lean()
+    await this.userRepository.delete(user.id)
   }
 
-  // updatePassword
   async updatePassword(id: string, password: string): Promise<UserResumenResponseDto> {
-    const hashedPassword = await hashPassword(password)
-    const user = await this.userModel.findByIdAndUpdate(id, { password: hashedPassword }).select('-_id -password').lean()
-    return mapUserResumenToDto(user)
-  }
+    const user = await this.findByIdRaw(id)
+    if (!user) return null
 
-  // countUsersByRole
+    user.passwordHash = await hashPassword(password)
+    const saved = await this.userRepository.save(user)
+    return mapUserResumenToDto(saved)
+  }
 }

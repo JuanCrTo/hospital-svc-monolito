@@ -1,4 +1,4 @@
-import { IsEmail, IsEnum, IsNotEmpty, IsOptional, IsString, IsStrongPassword, ValidateNested } from 'class-validator'
+import { IsEmail, IsEnum, IsNotEmpty, IsString, IsStrongPassword, ValidateIf, ValidateNested } from 'class-validator'
 import { USER_ROLES, UserRole } from '../../enums/user-role.enum'
 import { CreatePatientDto } from 'src/patient/dto/request/create-patient-request.dto'
 import { Type } from 'class-transformer'
@@ -50,6 +50,7 @@ export class CreateUserDto {
     description: 'details of the patient',
     type: () => CreatePatientDto
   })
+  @ValidateIf(o => o.role === 'patient')
   @IsNotEmpty({ message: 'Patient Details is required' })
   @ValidateNested()
   @Type(() => CreatePatientDto)

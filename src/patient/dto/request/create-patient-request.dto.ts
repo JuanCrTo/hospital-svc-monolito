@@ -60,5 +60,7 @@ export class CreatePatientDto {
     description: 'The address of the patient',
     example: 'apex las vegas'
   })
+  @IsNotEmpty({ message: 'Location is required' })
+  @IsString({ message: 'Location must be a string' })
   location: string
 }

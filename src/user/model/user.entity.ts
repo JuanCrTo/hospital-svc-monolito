@@ -1,4 +1,5 @@
 import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm'
+import { UserRole } from '../enums/user-role.enum'
 
 export type UserStatus = 'active' | 'inactive' | 'locked'
 
@@ -13,6 +14,9 @@ export class UserEntity {
 
   @Column({ name: 'password_hash', type: 'varchar', length: 255 })
   passwordHash: string
+
+  @Column({ type: 'varchar', length: 20, default: 'patient' })
+  role: UserRole
 
   @Column({ type: 'varchar', length: 20, default: 'active' })
   status: UserStatus

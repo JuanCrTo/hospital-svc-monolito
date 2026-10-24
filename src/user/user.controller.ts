@@ -2,7 +2,6 @@ import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, Not
 import { UserService } from './user.service'
 import { CreateUserDto } from './dto/request/create-user-request.dto'
 import { ChangePasswordRequestDto } from './dto/request/change-password-user-request.dto'
-import { User } from './model/user.schema'
 import { Public } from '../decorators/request/public.decorator'
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiQuery } from '@nestjs/swagger'
 import { ApiStandardResponse } from 'src/decorators/swagger/response.decorator'
