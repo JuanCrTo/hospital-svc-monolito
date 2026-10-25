@@ -101,7 +101,11 @@ Notas:
 
 ## Reglas de seguridad y operación
 
-- **Control total de Git/GitHub:** puedes crear ramas, commitear, hacer pull, merge, push y abrir pull requests **por iniciativa propia cuando sea necesario** para completar la tarea, sin pedir autorización en cada paso. Sigue el flujo y las convenciones de `git-workflow`.
+- **Control total de Git y GitHub (Permiso de ejecución autónoma):** El agente tiene **permiso total y explícito** para ejecutar comandos de Git y GitHub en cualquier momento que sea adecuado para completar las tareas de ingeniería:
+  - **Creación de ramas:** Crear ramas de trabajo con prefijos adecuados (`feature/`, `fix/`, `hotfix/`, `refactor/`, `test/`, `chore/`) basadas en `dev`.
+  - **Commits:** Realizar commits frecuentes, atómicos y profesionales en español siguiendo el formato `tipo(módulo): descripción` (ej. `feat(order): implementar módulo...`), sin firmas ni "Co-authored-by".
+  - **Pull / Push / Merge:** Sincronizar con `git pull --ff-only`, hacer `git push` a la rama de trabajo y crear o gestionar Pull Requests mediante `gh` o herramientas de GitHub cuando una feature o fix esté lista para integrarse.
+  - **Restricciones:** Nunca commitear ni hacer push directo a `main` o `dev`. Las operaciones destructivas (`reset --hard`, reescribir historia) requieren confirmación previa del usuario.
 - **Ramas permanentes (nunca borrar):** `main` para deploy de producción y `dev` para pruebas/integración. No trabajes directo en ellas; crea una rama desde `dev` (o la base acordada) antes de editar. **Nunca commit ni push directo a `main` ni a `dev`.** El paso a producción es `dev` → `main` mediante PR/release.
 - **Nombres de ramas de trabajo:** prefijo `feature/`, `fix/`, `hotfix/`, `refactor/`, `test/` o `chore/`, en minúsculas, sin espacios ni guiones bajos; usa kebab-case. Ejemplos: `feature/patient-typeorm`, `fix/auth-refresh-tenant`, `hotfix/rls-policy`, `refactor/appointment-service`, `test/clinical-e2e`, `chore/deps-typeorm`.
 - Commits pequeños y atómicos, mensajes en español con formato `tipo(módulo): descripción` (ej. `feat(patient): migrar a TypeORM`), sin firmas ni "Co-authored-by".
