@@ -10,6 +10,8 @@ import { CreateBedRequestDto } from './dto/request/create-bed-request.dto'
 import { TransferBedRequestDto } from './dto/request/transfer-bed-request.dto'
 import { CreateNursingNoteRequestDto } from './dto/request/create-nursing-note-request.dto'
 import { NursingNote } from './model/nursing-note.entity'
+import { NursingNoteAmendment } from './model/nursing-note-amendment.entity'
+import { CreateNursingNoteAmendmentRequestDto } from './dto/request/create-nursing-note-amendment-request.dto'
 import { AdmitPatientRequestDto } from './dto/request/admit-patient-request.dto'
 import { BedResponseDto, AdmissionResponseDto } from './dto/response/hospitalization-response.dto'
 @Injectable()
@@ -20,6 +22,7 @@ export class HospitalizationService {
     @InjectRepository(BedAssignment) private readonly assignments: Repository<BedAssignment>,
     @InjectRepository(Encounter) private readonly encounters: Repository<Encounter>,
     @InjectRepository(NursingNote) private readonly notes: Repository<NursingNote>,
+    @InjectRepository(NursingNoteAmendment) private readonly amendments: Repository<NursingNoteAmendment>,
     private readonly dataSource: DataSource,
     private readonly audit: AuditService
   ) {}
@@ -155,5 +158,21 @@ export class HospitalizationService {
     const admission = await this.admissions.findOne({ where: { id, tenantId, facilityId } })
     if (!admission) throw new NotFoundException('Admission not found')
     return this.notes.find({ where: { admissionId: id, tenantId, facilityId }, order: { createdAt: 'ASC' } })
+  }
+  async amendNursingNote(noteId: string, dto: CreateNursingNoteAmendmentRequestDto, tenantId: string, facilityId: string, userId: string) {
+    const note = await this.notes.findOne({ where: { id: noteId, tenantId, facilityId } })
+    if (!note) throw new NotFoundException('Nursing note not found')
+    const amendment = await this.amendments.save(
+      this.amendments.create({ tenantId, facilityId, nursingNoteId: noteId, authorUserId: userId, content: dto.content, reason: dto.reason })
+    )
+    await this.audit.record({
+      action: 'CREATE',
+      resourceType: 'nursing_note_amendment',
+      resourceId: amendment.id,
+      tenantId,
+      facilityId,
+      afterSummary: { nursingNoteId: noteId }
+    })
+    return amendment
   }
 }

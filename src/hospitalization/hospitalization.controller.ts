@@ -6,6 +6,7 @@ import { AuthContext } from 'src/iam/interfaces/auth-context.interface'
 import { HospitalizationService } from './hospitalization.service'
 import { CreateBedRequestDto } from './dto/request/create-bed-request.dto'
 import { TransferBedRequestDto } from './dto/request/transfer-bed-request.dto'
+import { CreateNursingNoteAmendmentRequestDto } from './dto/request/create-nursing-note-amendment-request.dto'
 import { CreateNursingNoteRequestDto } from './dto/request/create-nursing-note-request.dto'
 import { AdmitPatientRequestDto } from './dto/request/admit-patient-request.dto'
 @Controller('hospitalization')
@@ -33,6 +34,11 @@ export class HospitalizationController {
   @RequirePermission('nursing:write')
   addNote(@CurrentUser() c: AuthContext, @Param('id') id: string, @Body() dto: CreateNursingNoteRequestDto) {
     return this.service.addNursingNote(id, dto, c.tenantId, c.facilityId, c.userId)
+  }
+  @Post('nursing-notes/:id/amendments')
+  @RequirePermission('nursing:write')
+  amendNote(@CurrentUser() c: AuthContext, @Param('id') id: string, @Body() dto: CreateNursingNoteAmendmentRequestDto) {
+    return this.service.amendNursingNote(id, dto, c.tenantId, c.facilityId, c.userId)
   }
   @Get('admissions/:id/nursing-notes')
   @RequirePermission('nursing:read')
