@@ -9,9 +9,9 @@ API RESTful para la gestión hospitalaria. Permite administrar pacientes, doctor
 ## 🧑‍💻 Proyecto en Producción
 
 - 🔧 **Backend desplegado en Railway**
-  - Usando **Serverless MongoDB (Cold Starts)**
-- 🛢️ **Base de datos MongoDB en Railway**
-  - Usando **Serverless MongoDB (Cold Starts)**
+  - Usando **Serverless Base de datos PostgreSQL (Cold Starts)**
+- 🛢️ **Base de datos Base de datos PostgreSQL en Railway**
+  - Usando **Serverless Base de datos PostgreSQL (Cold Starts)**
 - 🔐 JWT configurado y Swagger protegido
 - 🐇 **RabbitMQ desplegado en CloudAMQP**
   - Utilizado para la gestión de colas
@@ -23,7 +23,7 @@ API RESTful para la gestión hospitalaria. Permite administrar pacientes, doctor
 - **Backend Framework:** [NestJS](https://nestjs.com/)
 - **Lenguaje:** TypeScript
 - **Base de Datos:** PostgreSQL 16 (TypeORM) — destino de la migración
-- **Base de Datos legado:** MongoDB (Mongoose ODM) durante la migración
+- **Base de Datos legado:** Base de datos PostgreSQL (Mongoose ODM) durante la migración
 - **Autenticación:** JWT
 - **Colas de Trabajo:** RabbitMQ
 - **Correo:** Mailgun
@@ -228,14 +228,14 @@ npm install
 
 ### 3. 🛠️ Crear archivo de entorno
 * Copia el archivo .env.example y crea el archivo .env
-* Edita el archivo .env con tus variables reales (MongoDB, JWT, Mailgun, RabbitMQ, etc.).
+* Edita el archivo .env con tus variables reales (Base de datos PostgreSQL, JWT, Mailgun, RabbitMQ, etc.).
 
 ### 4. 🧪 Verificar dependencias externas
 Asegúrate de tener ejecutando o configurado correctamente:
 
 * 🐘 PostgreSQL 16 (local o con `docker compose up postgres`)
 * 🐇 RabbitMQ (puede estar en CloudAMQP o local)
-* 🍃 MongoDB (local o desplegado) — legado durante la migración
+* 🍃 Base de datos PostgreSQL (local o desplegado) — legado durante la migración
 * Mailgun y Cloudinary si vas a probar envíos de correo y subida de archivos
 
 ### 5. 🗄️ Aplicar migraciones de PostgreSQL
@@ -275,14 +275,14 @@ Si todo está bien:
 
 ## 🐳 Cómo Ejecutar con Docker
 
-El proyecto incluye un `Dockerfile` multi-etapa (`development` y `production`) y un `docker-compose.yml` que levanta la API junto con **PostgreSQL**, **MongoDB** (legado) y **RabbitMQ** para desarrollo local.
+El proyecto incluye un `Dockerfile` multi-etapa (`development` y `production`) y un `docker-compose.yml` que levanta la API junto con **PostgreSQL**, **Base de datos PostgreSQL** (legado) y **RabbitMQ** para desarrollo local.
 
 ### Archivos Docker incluidos
 
 | Archivo | Propósito |
 |---------|-----------|
 | `Dockerfile` | Imagen multi-stage: `development` (hot-reload con `start:dev`) y `production` (build compilado). |
-| `docker-compose.yml` | Orquesta `api`, `postgres`, `mongo` y `rabbitmq` en la red `hospital`. |
+| `docker-compose.yml` | Orquesta `api`, `postgres`, `rabbitmq` en la red `hospital`. |
 | `.dockerignore` | Excluye `node_modules`, `dist`, `.env`, etc. del contexto de build. |
 
 ### 1. 🧩 Requisitos
@@ -294,7 +294,6 @@ El proyecto incluye un `Dockerfile` multi-etapa (`development` y `production`) y
 El `.env` es obligatorio. `docker-compose.yml` lo carga con `env_file`, pero **sobrescribe** las conexiones para apuntar a los contenedores:
 
 - `DB_HOST` → `postgres` · `DB_PORT` → `5432`
-- `MONGO_URI` → `mongodb://mongo:27017/hospital`
 - `RABBITMQ_URL` → `amqp://rabbitmq:5672`
 - `PORT` → `4000`
 
@@ -322,11 +321,10 @@ docker compose build
 docker compose build --no-cache
 ```
 
-Si prefieres descargar sólo las imágenes de infraestructura (PostgreSQL, Mongo y RabbitMQ) sin construir la API todavía:
+Si prefieres descargar sólo las imágenes de infraestructura (PostgreSQL, PostgreSQL y RabbitMQ) sin construir la API todavía:
 
 ```bash
 docker pull postgres:16-alpine
-docker pull mongo:7
 docker pull rabbitmq:3-management
 ```
 
@@ -355,7 +353,6 @@ Esto deja disponibles:
 | Health live | http://localhost:4000/api/v1/health/live | Liveness probe |
 | Health ready | http://localhost:4000/api/v1/health/ready | Readiness probe (PostgreSQL) |
 | PostgreSQL | `localhost:5432` | Base de datos principal |
-| MongoDB | `localhost:27017` | Base de datos legado |
 | RabbitMQ | `localhost:5672` | Broker de colas |
 | RabbitMQ UI | http://localhost:15672 | Panel web (`guest` / `guest`) |
 
@@ -382,7 +379,7 @@ docker compose exec api npm test -- --runInBand
 docker compose exec api npm run lint
 ```
 
-> 💡 Alternativa sin Docker: si ya tienes Node.js 20+ y MongoDB/RabbitMQ accesibles localmente, ejecuta directamente `npm install` y `npm run start:dev` (ver [🚀 Cómo Ejecutar Localmente](#-cómo-ejecutar-localmente)).
+> 💡 Alternativa sin Docker: si ya tienes Node.js 20+ y Base de datos PostgreSQL/RabbitMQ accesibles localmente, ejecuta directamente `npm install` y `npm run start:dev` (ver [🚀 Cómo Ejecutar Localmente](#-cómo-ejecutar-localmente)).
 
 ### 5. 🧪 Comandos útiles
 
@@ -415,13 +412,12 @@ docker build --target production -t hospital-b:prod .
 docker run --rm -p 4000:4000 --env-file .env hospital-b:prod
 ```
 
-> ⚠️ En producción debes proporcionar un `MONGO_URI` y `RABBITMQ_URL` accesibles desde el contenedor (por ejemplo, MongoDB y CloudAMQP gestionados), ya que no hay los contenedores locales de `docker-compose`.
 
 ---
 
 ## 🌍 Despliegue
 
-- El backend y la base de datos MongoDB están desplegados en **Railway** (1 vCPU y 3 GB de RAM).
+- El backend y la base de datos Base de datos PostgreSQL están desplegados en **Railway** (1 vCPU y 3 GB de RAM).
 - Railway maneja automáticamente el certificado **HTTPS**.
 - Configurado con **CORS**, acceso con **JWT**, documentación Swagger.
 - Las colas de trabajo con **RabbitMQ** están gestionadas desde **CloudAMQP**.
@@ -439,7 +435,7 @@ Este roadmap detalla las funcionalidades actuales del proyecto y las mejoras pla
 - [x] Envío de correos con Mailgun mediante colas RabbitMQ
 - [x] Documentación completa con Swagger
 - [x] Despliegue de Backend en Railway
-- [x] Despliegue de Base de Datos MongoDB en Railway
+- [x] Despliegue de Base de Datos Base de datos PostgreSQL en Railway
 - [x] Variables de entorno gestionadas mediante `.env`
 - [x] Integración con servicios externos de Google Maps para ubicación de pacientes
 

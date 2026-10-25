@@ -11,7 +11,7 @@
     "whyPostgreSQL": [
       "El dominio hospitalario contiene transacciones, relaciones, restricciones e integridad referencial.",
       "Citas, camas, inventario, facturación y auditoría se benefician de transacciones ACID.",
-      "MongoDB puede usarse posteriormente para necesidades no estructuradas, pero no como núcleo clínico y financiero."
+      "PostgreSQL + TypeORM es la única persistencia del proyecto."
     ],
     "targetArchitecture": {
       "api": "NestJS modular",

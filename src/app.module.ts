@@ -11,9 +11,7 @@ import { OrderModule } from './order/order.module'
 import { MedicalRecordModule } from './medical-record/medical-record.module'
 import { MedicineModule } from './medicine/medicine.module'
 import { AuthModule } from './auth/auth.module'
-import { MongooseModule } from '@nestjs/mongoose'
 import { ConfigModule } from '@nestjs/config'
-import { MongooseConfigService } from './mongoose-config/mongoose-config.service'
 import { TypeOrmModule } from '@nestjs/typeorm'
 import { TypeOrmConfigService } from './typeorm-config/typeorm-config.service'
 import { EmailModule } from './email/email.module'
@@ -23,6 +21,8 @@ import { LoggerModule } from './common/logging/logger.module'
 import { HealthModule } from './health/health.module'
 import { IamModule } from './iam/iam.module'
 import { RlsModule } from './common/rls/rls.module'
+import { PharmacyModule } from './pharmacy/pharmacy.module'
+import { HospitalizationModule } from './hospitalization/hospitalization.module'
 
 @Module({
   imports: [
@@ -35,7 +35,6 @@ import { RlsModule } from './common/rls/rls.module'
     LoggerModule,
     HealthModule,
     IamModule,
-    MongooseModule.forRootAsync({ useClass: MongooseConfigService }),
     DoctorModule,
     UserModule,
     NurseModule,
@@ -43,6 +42,8 @@ import { RlsModule } from './common/rls/rls.module'
     AppointmentModule,
     ClinicalModule,
     OrderModule,
+    PharmacyModule,
+    HospitalizationModule,
     MedicalRecordModule,
     MedicineModule,
     AuthModule,
