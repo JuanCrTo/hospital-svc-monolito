@@ -7,6 +7,7 @@ import { NurseModule } from './nurse/nurse.module'
 import { PatientModule } from './patient/patient.module'
 import { AppointmentModule } from './appointment/appointment.module'
 import { ClinicalModule } from './clinical/clinical.module'
+import { OrderModule } from './order/order.module'
 import { MedicalRecordModule } from './medical-record/medical-record.module'
 import { MedicineModule } from './medicine/medicine.module'
 import { AuthModule } from './auth/auth.module'
@@ -41,6 +42,7 @@ import { RlsModule } from './common/rls/rls.module'
     PatientModule,
     AppointmentModule,
     ClinicalModule,
+    OrderModule,
     MedicalRecordModule,
     MedicineModule,
     AuthModule,
